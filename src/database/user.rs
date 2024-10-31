@@ -38,6 +38,38 @@ impl TryFrom<&Row<'_>> for User {
 }
 
 impl User {
+    pub fn by_id(id: Uuid) -> Result<Option<User>, ServerError> {
+        let (query, values) = Query::select()
+            .columns([UserIden::Id, UserIden::Username, UserIden::Password])
+            .from(UserIden::Table)
+            .and_where(Expr::col(UserIden::Id).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let connection = Connection::open(DATABASE)?;
+        let mut statement = connection.prepare(&query)?;
+        let record: Option<Result<_, rusqlite::Error>> = statement
+            .query_and_then(&*values.as_params(), |row| User::try_from(row))?
+            .next();
+
+        Ok(record.transpose()?)
+    }
+
+    pub fn by_username(username: String) -> Result<Option<User>, ServerError> {
+        let (query, values) = Query::select()
+            .columns([UserIden::Id, UserIden::Username, UserIden::Password])
+            .from(UserIden::Table)
+            .and_where(Expr::col(UserIden::Username).eq(username))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let connection = Connection::open(DATABASE)?;
+        let mut statement = connection.prepare(&query)?;
+        let record: Option<Result<_, rusqlite::Error>> = statement
+            .query_and_then(&*values.as_params(), |row| User::try_from(row))?
+            .next();
+
+        Ok(record.transpose()?)
+    }
+
     pub fn insert(&self) -> Result<(), ServerError> {
         assert!(self.id.is_nil());
 
@@ -91,39 +123,5 @@ impl User {
         transaction.execute(&query2, &*values2.as_params())?;
         transaction.commit()?;
         Ok(())
-    }
-
-    pub fn select(id: Uuid) -> Result<Option<User>, ServerError> {
-        let (query, values) = Query::select()
-            .columns([UserIden::Id, UserIden::Username, UserIden::Password])
-            .from(UserIden::Table)
-            .and_where(Expr::col(UserIden::Id).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let connection = Connection::open(DATABASE)?;
-        let mut statement = connection.prepare(&query)?;
-        let record: Option<Result<_, rusqlite::Error>> = statement
-            .query_and_then(&*values.as_params(), |row| User::try_from(row))?
-            .next();
-
-        Ok(record.transpose()?)
-    }
-
-    pub fn select_by_username(
-        username: String,
-    ) -> Result<Option<User>, ServerError> {
-        let (query, values) = Query::select()
-            .columns([UserIden::Id, UserIden::Username, UserIden::Password])
-            .from(UserIden::Table)
-            .and_where(Expr::col(UserIden::Username).eq(username))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let connection = Connection::open(DATABASE)?;
-        let mut statement = connection.prepare(&query)?;
-        let record: Option<Result<_, rusqlite::Error>> = statement
-            .query_and_then(&*values.as_params(), |row| User::try_from(row))?
-            .next();
-
-        Ok(record.transpose()?)
     }
 }

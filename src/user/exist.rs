@@ -13,6 +13,6 @@ pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
     let has_user =
-        database::User::select_by_username(request.username.clone())?.is_some();
+        database::User::by_username(request.username.clone())?.is_some();
     Ok(HttpResponse::Ok().json(has_user))
 }

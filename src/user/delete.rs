@@ -28,7 +28,7 @@ pub async fn handler(
     if id != request.id {
         return Ok(HttpResponse::Forbidden().finish());
     }
-    let user = match database::User::select(request.id)? {
+    let user = match database::User::by_id(request.id)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
