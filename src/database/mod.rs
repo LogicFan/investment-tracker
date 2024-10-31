@@ -16,3 +16,4 @@ pub fn init() -> Result<(), ServerError> {
 }
 
 pub use user::User;
+pub use account::Account;

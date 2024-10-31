@@ -1,5 +1,4 @@
-use crate::database;
-use crate::error::ServerError;
+use crate::{database::Account, error::ServerError};
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -22,6 +21,6 @@ pub async fn handler(
         Some(i) => i
     };
 
-    let accounts = database::account::select_by_user(user_id)?;
+    let accounts = Account::select_by_user(user_id)?;
     Ok(HttpResponse::Ok().json(accounts))
 }

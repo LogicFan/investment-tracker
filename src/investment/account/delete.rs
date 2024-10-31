@@ -1,5 +1,4 @@
-use crate::database;
-use crate::error::ServerError;
+use crate::{database::Account, error::ServerError};
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -24,7 +23,7 @@ pub async fn handler(
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    let account = match database::account::select(request.account_id)? {
+    let account = match Account::select(request.account_id)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
@@ -34,6 +33,6 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    database::account::delete(request.account_id)?;
+    account.delete()?;
     Ok(HttpResponse::Ok().finish())
 }

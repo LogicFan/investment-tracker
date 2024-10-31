@@ -1,5 +1,4 @@
-use crate::database;
-use crate::database::account::Account;
+use crate::database::Account;
 use crate::error::ServerError;
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -27,7 +26,7 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    let account = match database::account::select(request.account.id)? {
+    let account = match Account::select(request.account.id)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
@@ -45,6 +44,6 @@ pub async fn handler(
         );
     }
 
-    database::account::update(request.account.clone())?;
+    request.account.update()?;
     Ok(HttpResponse::Ok().finish())
 }
