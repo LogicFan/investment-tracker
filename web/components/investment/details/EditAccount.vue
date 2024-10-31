@@ -3,7 +3,7 @@ import { useForm } from 'vuestic-ui';
 import { reactive, ref } from 'vue';
 import { Account } from '@/composables/account';
 import axios from 'axios';
-const account = defineModel<Account>()
+const account = defineModel<Account>({ required: true })
 
 const { isLoading, isValid, validateAsync } = useForm('formRef')
 

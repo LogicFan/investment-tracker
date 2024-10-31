@@ -82,6 +82,8 @@ pub fn update(account: Account) -> Result<(), ServerError> {
 }
 
 pub fn delete(id: Uuid) -> Result<(), ServerError> {
+    // TODO: also delete transaction related to this account.
+
     let (query, values) = Query::delete()
         .from_table(AccountIden::Table)
         .and_where(Expr::col(AccountIden::Id).eq(id))
