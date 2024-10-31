@@ -25,7 +25,7 @@ async function deleteUser() {
 
 function showDeleteUserModal() {
     modal.show = true;
-    modal.text = "Are you sure you want to delete all information related to this account?";
+    modal.text = "Are you sure you want to delete your user account?";
     modal.action = deleteUser
 }
 
