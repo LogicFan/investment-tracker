@@ -5,8 +5,6 @@ import DeleteAccount from './details/DeleteAccount.vue';
 
 const emits = defineEmits<{ back: [] }>()
 const props = defineProps<{ account: Account }>()
-
-console.log(emits)
 </script>
 
 <template>
