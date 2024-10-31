@@ -23,7 +23,7 @@ pub async fn handler(
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    let account = match Account::select(request.account_id)? {
+    let account = match Account::by_id(request.account_id)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }

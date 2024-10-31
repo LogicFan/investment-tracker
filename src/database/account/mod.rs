@@ -4,8 +4,8 @@ use super::DATABASE;
 use crate::error::ServerError;
 use core::str;
 pub use kind::AccountKind;
-use rusqlite::Connection;
-use sea_query::{enum_def, Expr, Query, SqliteQueryBuilder};
+use rusqlite::{Connection, Row};
+use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -29,6 +29,20 @@ impl PartialEq for Account {
 
 impl Eq for Account {}
 
+impl TryFrom<&Row<'_>> for Account {
+    type Error = rusqlite::Error;
+
+    fn try_from(value: &Row<'_>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.get(AccountIden::Id.as_str())?,
+            name: value.get(AccountIden::Name.as_str())?,
+            alias: value.get(AccountIden::Alias.as_str())?,
+            owner: value.get(AccountIden::Owner.as_str())?,
+            kind: value.get(AccountIden::Kind.as_str())?,
+        })
+    }
+}
+
 impl Account {
     pub fn owner(&self) -> Option<super::user::User> {
         match super::User::by_id(self.owner) {
@@ -39,6 +53,50 @@ impl Account {
 }
 
 impl Account {
+    pub fn by_id(id: Uuid) -> Result<Option<Account>, ServerError> {
+        let (query, values) = Query::select()
+            .columns([
+                AccountIden::Id,
+                AccountIden::Name,
+                AccountIden::Alias,
+                AccountIden::Owner,
+                AccountIden::Kind,
+            ])
+            .from(AccountIden::Table)
+            .and_where(Expr::col(AccountIden::Id).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let connection = Connection::open(DATABASE)?;
+        let mut statement = connection.prepare(&query)?;
+        let record: Option<Result<_, rusqlite::Error>> = statement
+            .query_and_then(&*values.as_params(), |row| Account::try_from(row))?
+            .next();
+
+        Ok(record.transpose()?)
+    }
+
+    pub fn by_owner(owner: Uuid) -> Result<Vec<Account>, ServerError> {
+        let (query, values) = Query::select()
+            .columns([
+                AccountIden::Id,
+                AccountIden::Name,
+                AccountIden::Alias,
+                AccountIden::Owner,
+                AccountIden::Kind,
+            ])
+            .from(AccountIden::Table)
+            .and_where(Expr::col(AccountIden::Owner).eq(owner))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let connection = Connection::open(DATABASE)?;
+        let mut statement = connection.prepare(&query)?;
+        let record: Result<Vec<_>, rusqlite::Error> = statement
+            .query_and_then(&*values.as_params(), |row| Account::try_from(row))?
+            .collect();
+
+        Ok(record?)
+    }
+
     pub fn insert(&self) -> Result<(), ServerError> {
         assert!(self.id.is_nil());
 
@@ -93,65 +151,5 @@ impl Account {
         let connection = Connection::open(DATABASE)?;
         connection.execute(&query, &*values.as_params())?;
         Ok(())
-    }
-
-    pub fn select(id: Uuid) -> Result<Option<Account>, ServerError> {
-        let (query, values) = Query::select()
-            .columns([
-                AccountIden::Id,
-                AccountIden::Name,
-                AccountIden::Alias,
-                AccountIden::Owner,
-                AccountIden::Kind,
-            ])
-            .from(AccountIden::Table)
-            .and_where(Expr::col(AccountIden::Id).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let connection = Connection::open(DATABASE)?;
-        let mut statement = connection.prepare(&query)?;
-        let record: Option<Result<_, rusqlite::Error>> = statement
-            .query_and_then(&*values.as_params(), |row| {
-                Ok(Account {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    alias: row.get(2)?,
-                    owner: row.get(3)?,
-                    kind: row.get(4)?,
-                })
-            })?
-            .next();
-
-        Ok(record.transpose()?)
-    }
-
-    pub fn select_by_user(user_id: Uuid) -> Result<Vec<Account>, ServerError> {
-        let (query, values) = Query::select()
-            .columns([
-                AccountIden::Id,
-                AccountIden::Name,
-                AccountIden::Alias,
-                AccountIden::Owner,
-                AccountIden::Kind,
-            ])
-            .from(AccountIden::Table)
-            .and_where(Expr::col(AccountIden::Owner).eq(user_id))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let connection = Connection::open(DATABASE)?;
-        let mut statement = connection.prepare(&query)?;
-        let record: Result<Vec<_>, rusqlite::Error> = statement
-            .query_and_then(&*values.as_params(), |row| {
-                Ok(Account {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    alias: row.get(2)?,
-                    owner: row.get(3)?,
-                    kind: row.get(4)?,
-                })
-            })?
-            .collect();
-
-        Ok(record?)
     }
 }
