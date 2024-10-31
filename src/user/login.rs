@@ -1,6 +1,5 @@
 use super::PRIVATE_KEY;
-use crate::database;
-use crate::error::ServerError;
+use crate::{database::User, error::ServerError};
 use crate::user::Claims;
 use actix_web::{post, web, HttpResponse, Responder};
 use jwt::SignWithKey;
@@ -26,7 +25,7 @@ pub async fn handler(
 ) -> Result<impl Responder, ServerError> {
     // permission check
     let user =
-        match database::User::by_username(request.username.clone())? {
+        match User::by_username(request.username.clone())? {
             None => return Ok(HttpResponse::BadRequest().finish()),
             Some(u) => u,
         };

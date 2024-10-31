@@ -1,4 +1,4 @@
-use crate::database;
+use crate::database::User;
 use crate::error::ServerError;
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -22,7 +22,7 @@ pub async fn handler(
         return Ok(HttpResponse::BadRequest().body("password too short"));
     }
 
-    database::User {
+    User {
         id: Uuid::nil(),
         username: request.username.clone(),
         password: Sha256::digest(request.password.clone()).to_vec(),

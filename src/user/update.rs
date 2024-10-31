@@ -1,4 +1,4 @@
-use crate::database;
+use crate::database::User;
 use crate::error::ServerError;
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -24,7 +24,7 @@ pub async fn handler(
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    let mut user = match database::User::by_id(id)? {
+    let mut user = match User::by_id(id)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };

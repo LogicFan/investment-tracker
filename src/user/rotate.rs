@@ -1,5 +1,5 @@
 use super::PRIVATE_KEY;
-use crate::database;
+use crate::database::User;
 use crate::error::ServerError;
 use crate::user::{authenticate, Claims};
 use actix_web::{post, web, HttpResponse, Responder};
@@ -29,7 +29,7 @@ pub async fn handler(
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    let user = match database::User::by_id(id)? {
+    let user = match User::by_id(id)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
