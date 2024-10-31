@@ -24,7 +24,7 @@ pub async fn handler(
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    let mut user = match database::user::select(Some(id), None)? {
+    let mut user = match database::User::select(id)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
@@ -41,6 +41,6 @@ pub async fn handler(
         user.password = Sha256::digest(new_password).to_vec()
     }
 
-    database::user::update(user)?;
+    user.update()?;
     Ok(HttpResponse::Ok().finish())
 }

@@ -26,7 +26,7 @@ pub async fn handler(
 ) -> Result<impl Responder, ServerError> {
     // permission check
     let user =
-        match database::user::select(None, Some(request.username.clone()))? {
+        match database::User::select_by_username(request.username.clone())? {
             None => return Ok(HttpResponse::BadRequest().finish()),
             Some(u) => u,
         };

@@ -27,11 +27,11 @@ pub async fn handler(
     // permission check
     let id = match authenticate(&request.token, now) {
         None => return Ok(HttpResponse::Forbidden().finish()),
-        Some(i) => i
+        Some(i) => i,
     };
-    let user = match database::user::select(Some(id), None)? {
+    let user = match database::User::select(id)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
-        Some(u) => u
+        Some(u) => u,
     };
 
     let claims = Claims {

@@ -31,7 +31,7 @@ impl Eq for Account {}
 
 impl Account {
     pub fn resolve_owner(&self) -> Option<super::user::User> {
-        match super::user::select(Some(self.owner), None) {
+        match super::User::select(self.owner) {
             Ok(Some(user)) => Some(user),
             _ => None,
         }

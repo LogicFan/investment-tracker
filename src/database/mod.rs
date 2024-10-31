@@ -14,3 +14,5 @@ pub fn init() -> Result<(), ServerError> {
     migration::run_migration()?;
     Ok(())
 }
+
+pub use user::User;

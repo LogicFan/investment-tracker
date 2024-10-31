@@ -28,7 +28,7 @@ pub async fn handler(
     if id != request.id {
         return Ok(HttpResponse::Forbidden().finish());
     }
-    let user = match database::user::select(Some(request.id), None)? {
+    let user = match database::User::select(request.id)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
@@ -36,6 +36,6 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    database::user::delete(request.id)?;
+    user.delete()?;
     Ok(HttpResponse::Ok().finish())
 }
