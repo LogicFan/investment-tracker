@@ -23,6 +23,8 @@ async fn main() -> std::io::Result<()> {
             .service(investment::account::fetch::handler)
             .service(investment::account::update::handler)
             .service(investment::account::delete::handler)
+            .service(investment::transaction::insert::handler)
+            .service(investment::transaction::fetch::handler)
             // .service(investment::account::delete)
             .service(Files::new("/", "dist/").index_file("index.html"))
             .default_service(web::to(flexfolio::index))

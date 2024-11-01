@@ -44,7 +44,7 @@ impl TryFrom<&Row<'_>> for Account {
 }
 
 impl Account {
-    pub fn owner(&self) -> Option<super::user::User> {
+    pub fn owner(&self) -> Option<super::User> {
         match super::User::by_id(self.owner) {
             Ok(Some(user)) => Some(user),
             _ => None,
