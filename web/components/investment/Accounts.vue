@@ -26,12 +26,12 @@ fetch();
                 Performance
             </VaCardTitle>
         </VaCard>
-        <VaCard class="h-72 w-60 flex-grow-0">
+        <VaCard class="h-72 w-64 flex-grow-0">
             <VaCardTitle>
                 Composition
             </VaCardTitle>
         </VaCard>
-        <VaCard class="h-72 w-60 flex-grow-0">
+        <VaCard class="h-72 w-64 flex-grow-0">
             <VaCardTitle>
                 Contribution Room
             </VaCardTitle>

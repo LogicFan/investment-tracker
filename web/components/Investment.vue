@@ -12,7 +12,7 @@ const account: Ref<Account> = ref(null)
         <Accounts @select="(value) => account = value" />
     </template>
     <template v-else>
-        <Details :account="account" @back="() => account = null" />
+        <Details :account="account" @exit="() => account = null" />
     </template>
 </template>
 
