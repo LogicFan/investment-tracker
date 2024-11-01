@@ -56,14 +56,14 @@ pub struct Interest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Buy {
-    pub stock: Value,
+    pub asset: Value,
     pub cash: Value,
     pub fee: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sell {
-    pub stock: Value,
+    pub asset: Value,
     pub cash: Value,
     pub fee: Value,
 }
