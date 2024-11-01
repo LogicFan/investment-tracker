@@ -44,7 +44,7 @@ async function beforeOk(hide: () => void) {
 
 <template>
     <div class="flex-grow-0 flex-shrink-0 ml-2">
-        <VaButton icon="edit" @click="modal = true" />
+        <VaButton icon="ms-edit" @click="modal = true" />
         <VaModal v-model="modal" ok-text="Save" size="auto" @open="reset"
                  :before-ok="beforeOk">
             <VaForm ref="formRef" class="w-80 flex flex-col items-center">

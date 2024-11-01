@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useForm } from 'vuestic-ui';
 import { reactive, ref } from 'vue';
-import { Account, kindOptions } from '@/composables/account';
+import { kindOptions } from '@/composables/account';
 import { getUserId } from '@/composables/user';
 import axios from 'axios';
 
@@ -13,11 +13,9 @@ const { isLoading, isValid, reset, validateAsync } = useForm('formRef')
 
 const hover = ref(false);
 const modal = ref(false);
-const form: Account = reactive({
-    id: "00000000-0000-0000-0000-000000000000",
+const form = reactive({
     name: "",
     alias: "",
-    owner: getUserId(),
     kind: "",
 })
 
@@ -31,7 +29,12 @@ async function beforeOk(hide: () => void) {
 
     await axios.post('/api/investment/account/insert', {
         token: localStorage.getItem('token'),
-        account: form
+        account: {
+            name: form.name,
+            alias: form.alias,
+            owner: getUserId(),
+            kind: form.kind,
+        }
     });
     emits("insert");
     hide();

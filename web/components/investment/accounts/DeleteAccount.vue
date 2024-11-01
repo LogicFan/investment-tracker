@@ -18,7 +18,7 @@ async function beforeOk(hide: () => void) {
 
 <template>
     <div class="flex-grow-0 flex-shrink-0 ml-2">
-        <VaButton icon="delete" @click="modal = true" />
+        <VaButton icon="ms-delete" @click="modal = true" />
         <VaModal v-model="modal" ok-text="Save" size="auto"
                  :before-ok="beforeOk">
             <div class="w-80">
