@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS `user` (
     `id` TEXT PRIMARY KEY NOT NULL,
     `username` TEXT UNIQUE NOT NULL,
-    `password` BLOB NOT NULL
+    `password` BLOB NOT NULL,
+    `login_at` DATETIME,
+    `attempts` NUMBER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS `user_i0` ON `user` (`username`);

@@ -18,3 +18,13 @@ pub fn init() -> Result<(), ServerError> {
 pub use user::User;
 pub use account::Account;
 pub use transaction::Transaction;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init() {
+        init().expect("database initialization fail");
+    }
+}
