@@ -22,10 +22,7 @@ struct Response {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-
-    // permission check
-    let id = match authenticate(&request.token, now) {
+    let id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
@@ -34,6 +31,7 @@ pub async fn handler(
         Some(u) => u,
     };
 
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let claims = Claims {
         iss: id,
         iat: now,

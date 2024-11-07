@@ -1,9 +1,9 @@
 pub mod delete;
+pub mod exist;
 pub mod login;
 pub mod register;
 pub mod rotate;
 pub mod update;
-pub mod exist;
 
 use hmac::{Hmac, Mac};
 use jwt::{Header, Token, VerifyWithKey};
@@ -11,6 +11,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::sync::LazyLock;
+use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 use uuid::Uuid;
 
 static PRIVATE_KEY: LazyLock<Hmac<Sha256>> = LazyLock::new(|| {
@@ -31,17 +32,19 @@ struct Claims {
     exp: u64,
 }
 
-pub fn authenticate(token: &str, now: u64) -> Option<Uuid> {
+pub fn authenticate(token: &str) -> Result<Option<Uuid>, SystemTimeError> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+
     match token.verify_with_key(&*PRIVATE_KEY).ok() {
         Some(token) => {
             let token: Token<Header, Claims, _> = token;
             let claims: &Claims = token.claims();
             if claims.exp > now {
-                Some(claims.iss)
-            } else {
-                None
+                return Ok(Some(claims.iss));
             }
         }
-        _ => None,
+        _ => (),
     }
+
+    Ok(None)
 }
