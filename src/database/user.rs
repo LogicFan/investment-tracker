@@ -104,15 +104,28 @@ impl User {
     }
 
     pub fn delete(&self) -> Result<(), ServerError> {
-        // TODO: remove transaction related to user.
-
         use super::account::AccountIden;
+        use super::transaction::TransactionIden;
+
         let (query1, values1) = Query::delete()
+            .from_table(TransactionIden::Table)
+            .and_where(
+                Expr::col(TransactionIden::Account).in_subquery(
+                    Query::select()
+                        .columns([AccountIden::Id])
+                        .from(AccountIden::Table)
+                        .and_where(Expr::col(AccountIden::Owner).eq(self.id))
+                        .take(),
+                ),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let (query2, values2) = Query::delete()
             .from_table(AccountIden::Table)
             .and_where(Expr::col(AccountIden::Owner).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let (query2, values2) = Query::delete()
+        let (query3, values3) = Query::delete()
             .from_table(UserIden::Table)
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
@@ -121,6 +134,7 @@ impl User {
         let transaction = connection.transaction()?;
         transaction.execute(&query1, &*values1.as_params())?;
         transaction.execute(&query2, &*values2.as_params())?;
+        transaction.execute(&query3, &*values3.as_params())?;
         transaction.commit()?;
         Ok(())
     }

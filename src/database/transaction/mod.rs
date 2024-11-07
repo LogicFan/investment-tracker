@@ -120,4 +120,31 @@ impl Transaction {
         connection.execute(&query, &*values.as_params())?;
         Ok(())
     }
+
+    pub fn update(&self) -> Result<(), ServerError> {
+        let (query, values) = Query::update()
+            .table(TransactionIden::Table)
+            .values([
+                (TransactionIden::Account, self.account.into()),
+                (TransactionIden::Date, self.date.into()),
+                (TransactionIden::Action, self.action.clone().into()),
+            ])
+            .and_where(Expr::col(TransactionIden::Id).eq(self.id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let connection = Connection::open(DATABASE)?;
+        connection.execute(&query, &*values.as_params())?;
+        Ok(())
+    }
+
+    pub fn delete(&self) -> Result<(), ServerError> {
+        let (query, values) = Query::delete()
+            .from_table(TransactionIden::Table)
+            .and_where(Expr::col(TransactionIden::Id).eq(self.id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let connection = Connection::open(DATABASE)?;
+        connection.execute(&query, &*values.as_params())?;
+        Ok(())
+    }
 }
