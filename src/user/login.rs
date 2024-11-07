@@ -19,6 +19,7 @@ struct Response {
     token: String,
 }
 
+// TODO: set retry interval after 3 attempts.
 #[post("/api/user/login")]
 pub async fn handler(
     request: web::Json<Request>,

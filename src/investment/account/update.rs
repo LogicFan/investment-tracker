@@ -16,16 +16,6 @@ pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-
-    // permission check
-    let user_id = match authenticate(&request.token, now) {
-        Some(i) => i,
-        None => return Ok(HttpResponse::Forbidden().finish()),
-    };
-    if request.account.owner != user_id {
-        return Ok(HttpResponse::Forbidden().finish());
-    }
-
     let account = match Account::by_id(request.account.id)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
@@ -33,14 +23,23 @@ pub async fn handler(
         Some(a) => a,
     };
 
+    // permission check
+    let user_id = match authenticate(&request.token, now) {
+        Some(i) => i,
+        None => return Ok(HttpResponse::Forbidden().finish()),
+    };
+    if account.owner != user_id {
+        return Ok(HttpResponse::Forbidden().finish());
+    }
+
     // input check
     if request.account.name.len() < 4 {
         return Ok(HttpResponse::BadRequest().body("account name too short"));
     } else if request.account.alias.len() < 4 {
         return Ok(HttpResponse::BadRequest().body("account alias too short"));
-    } else if request.account.kind != account.kind {
+    } else if request.account.owner != account.owner {
         return Ok(
-            HttpResponse::BadRequest().body("account kind can not be modified")
+            HttpResponse::BadRequest().body("owner cannot be modified")
         );
     }
 

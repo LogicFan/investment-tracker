@@ -19,17 +19,17 @@ pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-
-    // permission check
-    let user_id = match authenticate(&request.token, now) {
-        None => return Ok(HttpResponse::Forbidden().finish()),
-        Some(i) => i,
-    };
     let account = match Account::by_id(request.transaction.account)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
         Some(a) => a,
+    };
+
+    // permission check
+    let user_id = match authenticate(&request.token, now) {
+        None => return Ok(HttpResponse::Forbidden().finish()),
+        Some(i) => i,
     };
     if account.owner != user_id {
         return Ok(HttpResponse::Forbidden().finish());
