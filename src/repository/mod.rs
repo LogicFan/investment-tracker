@@ -1,6 +1,6 @@
 mod currency;
 
-use crate::database::asset::Asset;
+use crate::database::asset::AssetId;
 use crate::error::ServerError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -15,7 +15,7 @@ pub enum AssetKind {
 }
 
 pub struct AssetInfo {
-    id: Asset,
+    id: AssetId,
     name: String,
     kind: AssetKind,
 }
@@ -23,15 +23,18 @@ pub struct AssetInfo {
 pub trait IRepository {
     async fn search(
         &self,
-        user_id: Uuid,
-        prefix: String,
-        kinds: Vec<AssetKind>,
-    ) -> Result<Vec<AssetInfo>, ServerError>;
+        _: Uuid,
+        _: String,
+        _: Vec<AssetKind>,
+    ) -> Result<Vec<AssetInfo>, ServerError> {
+        Err(ServerError::Internal(String::from("Unsupported")))
+    }
 }
 
 pub struct Repository;
 
 impl IRepository for Repository {
+
     async fn search(
         &self,
         user_id: Uuid,

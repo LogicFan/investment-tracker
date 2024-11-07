@@ -74,9 +74,7 @@ impl Transaction {
         Ok(record.transpose()?)
     }
 
-    pub fn by_accounts(
-        accounts: Vec<Uuid>,
-    ) -> Result<Vec<Transaction>, ServerError> {
+    pub fn by_account(account: Uuid) -> Result<Vec<Transaction>, ServerError> {
         let (query, values) = Query::select()
             .columns([
                 TransactionIden::Id,
@@ -85,7 +83,7 @@ impl Transaction {
                 TransactionIden::Action,
             ])
             .from(TransactionIden::Table)
-            .and_where(Expr::col(TransactionIden::Account).is_in(accounts))
+            .and_where(Expr::col(TransactionIden::Account).eq(account))
             .build_rusqlite(SqliteQueryBuilder);
 
         let connection = Connection::open(DATABASE)?;

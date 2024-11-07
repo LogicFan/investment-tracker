@@ -1,5 +1,5 @@
 use super::{AssetInfo, AssetKind, IRepository};
-use crate::database::asset::Asset;
+use crate::database::asset::AssetId;
 use crate::error::ServerError;
 use serde::Deserialize;
 use std::sync::LazyLock;
@@ -33,7 +33,7 @@ impl IRepository for Repository {
             .iter()
             .filter(|x| x.symbol.starts_with(&prefix))
             .map(|x| AssetInfo {
-                id: Asset::CURRENCY(x.symbol.clone()),
+                id: AssetId::CURRENCY(x.symbol.clone()),
                 name: x.name.clone(),
                 kind: AssetKind::Currency,
             })

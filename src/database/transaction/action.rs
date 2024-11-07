@@ -1,19 +1,22 @@
-use crate::database::asset::Asset;
+use crate::database::asset::AssetId;
 use core::str;
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-type Value = (Decimal, Asset);
+type Value = (Decimal, AssetId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum TxnAction {
     Deposit(Deposit),
     Withdrawal(Withdrawal),
+    Income(Income),
+    Fee(Fee),
     Buy(Buy),
     Sell(Sell),
-    Interest(Interest),
+    Dividend(Dividend),
+    Journal(Journal),
 }
 
 impl From<TxnAction> for sea_query::value::Value {
@@ -49,9 +52,15 @@ pub struct Withdrawal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Interest {
+pub struct Income {
     pub value: Value,
-    pub fee: Value,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Fee {
+    pub value: Value,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,5 +74,19 @@ pub struct Buy {
 pub struct Sell {
     pub asset: Value,
     pub cash: Value,
+    pub fee: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dividend {
+    pub source: AssetId,
+    pub value: Value,
+    pub fee: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Journal {
+    pub source: AssetId,
+    pub target: AssetId,
     pub fee: Value,
 }

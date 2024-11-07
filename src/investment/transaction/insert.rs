@@ -1,5 +1,5 @@
 use crate::database::account::AccountKind;
-use crate::database::asset::Asset;
+use crate::database::asset::AssetId;
 use crate::database::transaction::TxnAction;
 use crate::database::{Account, Transaction};
 use crate::error::ServerError;
@@ -52,7 +52,7 @@ pub async fn handler(
 fn rule_dep_wdl_cad(transaction: &Transaction) -> Option<HttpResponse> {
     match &transaction.action {
         TxnAction::Deposit(deposit) => {
-            if deposit.value.1 != Asset::CURRENCY(String::from("CAD")) {
+            if deposit.value.1 != AssetId::CURRENCY(String::from("CAD")) {
                 return Some(
                     HttpResponse::BadRequest()
                         .body("TFSA/RRSP/FHSA account can only deposit CAD"),
@@ -60,7 +60,7 @@ fn rule_dep_wdl_cad(transaction: &Transaction) -> Option<HttpResponse> {
             }
         }
         TxnAction::Withdrawal(withdrawal) => {
-            if withdrawal.value.1 != Asset::CURRENCY(String::from("CAD")) {
+            if withdrawal.value.1 != AssetId::CURRENCY(String::from("CAD")) {
                 return Some(
                     HttpResponse::BadRequest()
                         .body("TFSA/RRSP/FHSA account can only withdrawal CAD"),

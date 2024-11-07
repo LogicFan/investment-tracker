@@ -9,7 +9,7 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize)]
 struct Request {
     token: String,
-    accounts: Vec<Uuid>,
+    account: Uuid,
 }
 
 #[post("/api/investment/transaction/fetch")]
@@ -23,20 +23,16 @@ pub async fn handler(
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    for account_id in &request.accounts {
-        let account = match Account::by_id(*account_id)? {
-            None => {
-                return Ok(
-                    HttpResponse::BadRequest().body("account does not exist")
-                )
-            }
-            Some(a) => a,
-        };
-        if account.owner != user_id {
-            return Ok(HttpResponse::Forbidden().finish());
+    let account = match Account::by_id(request.account)? {
+        None => {
+            return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
+        Some(a) => a,
+    };
+    if account.owner != user_id {
+        return Ok(HttpResponse::Forbidden().finish());
     }
 
-    let transactions = Transaction::by_accounts(request.accounts.clone())?;
+    let transactions = Transaction::by_account(request.account)?;
     Ok(HttpResponse::Ok().json(transactions))
 }
