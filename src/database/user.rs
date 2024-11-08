@@ -81,7 +81,7 @@ impl User {
         Ok(record.transpose()?)
     }
 
-    pub fn by_username(username: String) -> Result<Option<User>, ServerError> {
+    pub fn by_username(username: impl Into<String>) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
                 UserIden::Id,
@@ -91,7 +91,7 @@ impl User {
                 UserIden::Attempts,
             ])
             .from(UserIden::Table)
-            .and_where(Expr::col(UserIden::Username).eq(username))
+            .and_where(Expr::col(UserIden::Username).eq(username.into()))
             .build_rusqlite(SqliteQueryBuilder);
 
         let connection = Connection::open(DATABASE)?;
@@ -243,15 +243,15 @@ mod tests {
     fn test_insert_and_select() {
         database::init().expect("database initialization fail");
 
-        let username = String::from("test_u0");
+        let username = "test_user_u0";
         let mut u0 = User::new(
-            username.clone(),
+            username,
             Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
         assert_ne!(Uuid::nil(), u0.id);
 
-        let u1 = User::by_username(username.clone())
+        let u1 = User::by_username(username)
             .expect("select by username panic")
             .expect("user does not exist");
         assert_eq!(u0.id, u1.id);
@@ -273,14 +273,14 @@ mod tests {
     fn test_duplicate_insert() {
         database::init().expect("database initialization fail");
 
-        let username = String::from("test_u1");
+        let username = "test_user_u1";
         let mut u0 = User::new(
-            username.clone(),
+            username,
             Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
         let u1 = User::new(
-            username.clone(),
+            username,
             Sha256::digest("password").to_vec(),
         );
         u1.insert().expect_err("duplicate insert");
@@ -290,16 +290,16 @@ mod tests {
     }
 
     #[test]
-    fn test_update() {
+    fn test_user_update() {
         database::init().expect("database initialization fail");
 
         let mut u0 = User::new(
-            String::from("test_u2"),
+            "test_user_u2",
             Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
 
-        u0.username = String::from("test_u3");
+        u0.username = String::from("test_user_u3");
         u0.update().expect("update fail");
         let u1 = User::by_id(u0.id)
             .expect("select panic")
@@ -322,7 +322,7 @@ mod tests {
         database::init().expect("database initialization fail");
 
         let mut u0 = User::new(
-            String::from("test_u4"),
+            "test_user_u4",
             Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
@@ -336,7 +336,7 @@ mod tests {
         database::init().expect("database initialization fail");
 
         let mut u0 = User::new(
-            String::from("test_u5"),
+            "test_user_u5",
             Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
