@@ -243,10 +243,10 @@ mod tests {
     fn test_insert_and_select() {
         database::init().expect("database initialization fail");
 
-        let username = String::from("test_insert_and_select");
+        let username = String::from("test_u0");
         let mut u0 = User::new(
             username.clone(),
-            Sha256::digest("test_password_1").to_vec(),
+            Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
         assert_ne!(Uuid::nil(), u0.id);
@@ -273,15 +273,15 @@ mod tests {
     fn test_duplicate_insert() {
         database::init().expect("database initialization fail");
 
-        let username = String::from("test_duplicate_insert");
+        let username = String::from("test_u1");
         let mut u0 = User::new(
             username.clone(),
-            Sha256::digest("test_password_2").to_vec(),
+            Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
         let u1 = User::new(
             username.clone(),
-            Sha256::digest("test_password_3").to_vec(),
+            Sha256::digest("password").to_vec(),
         );
         u1.insert().expect_err("duplicate insert");
 
@@ -294,12 +294,12 @@ mod tests {
         database::init().expect("database initialization fail");
 
         let mut u0 = User::new(
-            String::from("test_update"),
-            Sha256::digest("test_password_4").to_vec(),
+            String::from("test_u2"),
+            Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
 
-        u0.username = String::from("test_update_2");
+        u0.username = String::from("test_u3");
         u0.update().expect("update fail");
         let u1 = User::by_id(u0.id)
             .expect("select panic")
@@ -322,8 +322,8 @@ mod tests {
         database::init().expect("database initialization fail");
 
         let mut u0 = User::new(
-            String::from("test_update"),
-            Sha256::digest("test_password_4").to_vec(),
+            String::from("test_u4"),
+            Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
         User::delete(u0.id).expect("delete panic");
@@ -336,8 +336,8 @@ mod tests {
         database::init().expect("database initialization fail");
 
         let mut u0 = User::new(
-            String::from("test_attempts"),
-            Sha256::digest("test_password_4").to_vec(),
+            String::from("test_u5"),
+            Sha256::digest("password").to_vec(),
         );
         u0.id = u0.insert().expect("insert panic");
 
