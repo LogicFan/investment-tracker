@@ -248,19 +248,19 @@ mod tests {
             username,
             Sha256::digest("password").to_vec(),
         );
-        u0.id = u0.insert().expect("insert panic");
+        u0.id = u0.insert().expect("panic");
         assert_ne!(Uuid::nil(), u0.id);
 
         let u1 = User::by_username(username)
-            .expect("select by username panic")
-            .expect("user does not exist");
+            .expect("panic")
+            .expect("panic");
         assert_eq!(u0.id, u1.id);
         assert_eq!(u0.username, u1.username);
         assert_eq!(u0.password, u1.password);
 
         let u2 = User::by_id(u0.id)
-            .expect("select by id panic")
-            .expect("user does not exist");
+            .expect("panic")
+            .expect("panic");
         assert_eq!(u0.id, u2.id);
         assert_eq!(u0.username, u2.username);
         assert_eq!(u0.password, u2.password);
@@ -278,7 +278,7 @@ mod tests {
             username,
             Sha256::digest("password").to_vec(),
         );
-        u0.id = u0.insert().expect("insert panic");
+        u0.id = u0.insert().expect("panic");
         let u1 = User::new(
             username,
             Sha256::digest("password").to_vec(),
@@ -297,20 +297,20 @@ mod tests {
             "test_user_u2",
             Sha256::digest("password").to_vec(),
         );
-        u0.id = u0.insert().expect("insert panic");
+        u0.id = u0.insert().expect("panic");
 
         u0.username = String::from("test_user_u3");
-        u0.update().expect("update fail");
+        u0.update().expect("panic");
         let u1 = User::by_id(u0.id)
-            .expect("select panic")
-            .expect("user does not exist");
+            .expect("panic")
+            .expect("panic");
         assert_eq!(u0.username, u1.username);
 
         u0.password = Sha256::digest("some_random_password").to_vec();
-        u0.update().expect("update fail");
+        u0.update().expect("panic");
         let u1 = User::by_id(u0.id)
-            .expect("select panic")
-            .expect("user does not exist");
+            .expect("panic")
+            .expect("panic");
         assert_eq!(u0.password, u1.password);
 
         // clean up
@@ -325,10 +325,10 @@ mod tests {
             "test_user_u4",
             Sha256::digest("password").to_vec(),
         );
-        u0.id = u0.insert().expect("insert panic");
-        User::delete(u0.id).expect("delete panic");
+        u0.id = u0.insert().expect("panic");
+        User::delete(u0.id).expect("panic");
 
-        assert_eq!(None, User::by_id(u0.id).expect("select panic"));
+        assert_eq!(None, User::by_id(u0.id).expect("panic"));
     }
 
     #[test]
@@ -339,26 +339,26 @@ mod tests {
             "test_user_u5",
             Sha256::digest("password").to_vec(),
         );
-        u0.id = u0.insert().expect("insert panic");
+        u0.id = u0.insert().expect("panic");
 
-        let a = u0.attempts().expect("cannot get attempts");
+        let a = u0.attempts().expect("panic");
         assert_eq!(0, a);
 
-        u0.add_attempt().expect("cannot add attempts");
-        let a = u0.attempts().expect("cannot get attempts");
+        u0.add_attempt().expect("panic");
+        let a = u0.attempts().expect("panic");
         assert_eq!(1, a);
 
-        u0.add_attempt().expect("cannot add attempts");
-        let a = u0.attempts().expect("cannot get attempts");
+        u0.add_attempt().expect("panic");
+        let a = u0.attempts().expect("panic");
         assert_eq!(2, a);
 
-        u0.add_attempt().expect("cannot add attempts");
-        let a = u0.attempts().expect("cannot get attempts");
+        u0.add_attempt().expect("panic");
+        let a = u0.attempts().expect("panic");
         assert_eq!(3, a);
 
         thread::sleep(Duration::from_secs(70));
 
-        let a = u0.attempts().expect("cannot get attempts");
+        let a = u0.attempts().expect("panic");
         assert_eq!(0, a);
 
         User::delete(u0.id).expect("test clean-up fail");
