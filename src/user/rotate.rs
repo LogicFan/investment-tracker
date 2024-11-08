@@ -8,19 +8,19 @@ use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Deserialize)]
-struct Request {
+struct RequestData {
     token: String,
 }
 
 #[derive(Debug, Serialize)]
-struct Response {
+struct ResponseData {
     username: String,
     token: String,
 }
 
 #[post("/api/user/rotate")]
 pub async fn handler(
-    request: web::Json<Request>,
+    request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
     let id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
@@ -39,7 +39,7 @@ pub async fn handler(
     };
     let token = claims.sign_with_key(&*PRIVATE_KEY)?;
 
-    let response = Response {
+    let response = ResponseData {
         username: user.username,
         token,
     };

@@ -1,5 +1,6 @@
 use super::PRIVATE_KEY;
-use crate::{database::User, error::ServerError};
+use crate::database::User;
+use crate::error::ServerError;
 use crate::user::Claims;
 use actix_web::{post, web, HttpResponse, Responder};
 use jwt::SignWithKey;
@@ -8,30 +9,33 @@ use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Deserialize)]
-struct Request {
+struct RequestData {
     username: String,
     password: String,
 }
 
 #[derive(Debug, Serialize)]
-struct Response {
+struct ResponseData {
     username: String,
     token: String,
 }
 
-// TODO: set retry interval after 3 attempts.
 #[post("/api/user/login")]
 pub async fn handler(
-    request: web::Json<Request>,
+    request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    // permission check
-    let user =
-        match User::by_username(request.username.clone())? {
-            None => return Ok(HttpResponse::BadRequest().finish()),
-            Some(u) => u,
-        };
+    let user = match User::by_username(request.username.clone())? {
+        None => return Ok(HttpResponse::BadRequest().finish()),
+        Some(u) => u,
+    };
+
+    if user.attempts()? > 3 {
+        return Ok(HttpResponse::Forbidden().body("try again after 1 minute"));
+    }
+
     if Sha256::digest(request.password.clone()).to_vec() != user.password {
-        return Ok(HttpResponse::Forbidden().finish());
+        user.add_attempt()?;
+        return Ok(HttpResponse::Forbidden().body("incorrect password"));
     }
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -41,7 +45,7 @@ pub async fn handler(
         exp: now + 3600,
     };
     let token = claims.sign_with_key(&*PRIVATE_KEY)?;
-    let response = Response {
+    let response = ResponseData {
         username: user.username,
         token,
     };

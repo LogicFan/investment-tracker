@@ -6,7 +6,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Deserialize)]
-struct Request {
+struct RequestData {
     token: String,
     username: Option<String>,
     password: Option<(String, String)>,
@@ -14,7 +14,7 @@ struct Request {
 
 #[post("/api/user/update")]
 pub async fn handler(
-    request: web::Json<Request>,
+    request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
     // permission check
     let id = match authenticate(&request.token)? {

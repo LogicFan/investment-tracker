@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
-struct Request {
+struct RequestData {
     token: String,
     password: String,
     id: Uuid,
@@ -15,7 +15,7 @@ struct Request {
 
 #[post("/api/user/delete")]
 pub async fn handler(
-    request: web::Json<Request>,
+    request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
     let id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
@@ -32,6 +32,6 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    user.delete()?;
+    User::delete(user.id)?;
     Ok(HttpResponse::Ok().finish())
 }
