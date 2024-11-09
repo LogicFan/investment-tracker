@@ -27,6 +27,6 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    account.delete()?;
+    Account::delete(account.id)?;
     Ok(HttpResponse::Ok().finish())
 }

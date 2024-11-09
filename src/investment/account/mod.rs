@@ -18,10 +18,10 @@ fn has_permission(
 
 fn validate_input(account: &Account) -> Option<&'static str> {
     if account.name.len() < 4 {
-        return Some("account name too short");
+        Some("account name too short")
     } else if account.alias.len() < 4 {
-        return Some("account alias too short");
+        Some("account alias too short")
     } else {
-        return None;
+        None
     }
 }
