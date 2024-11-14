@@ -16,7 +16,7 @@ const form = reactive({
     username: '',
     password: '',
     password2: '',
-    status200: true,
+    response: true as boolean | string,
 })
 
 async function beforeOk(hide: () => void) {
@@ -32,10 +32,11 @@ async function beforeOk(hide: () => void) {
             hide();
             login(response.data);
             authorize.value = true;
-        } catch {
-            form.status200 = false;
+        } catch (error) {
+            console.log(error)
+            form.response = error.response.data;
             await validateAsync();
-            form.status200 = true;
+            form.response = true;
             authorize.value = false;
         }
     } else {
@@ -105,7 +106,7 @@ setInterval(rotateToken, 1000 * 60);
                          class="w-4/5 flex-grow-0" />
                 <VaInput v-model="form.password" label="Password"
                          type="password"
-                         :rules="[(_) => form.status200 || 'incorrect password']"
+                         :rules="[(_) => form.response]"
                          class="w-4/5 flex-grow-0 mt-2" />
                 <div class="w-4/5 flex-grow-0 mt-4">
                     Don't have an account?
