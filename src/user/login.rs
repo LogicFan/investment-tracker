@@ -25,11 +25,11 @@ pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
     let user = match User::by_username(request.username.clone())? {
-        None => return Ok(HttpResponse::BadRequest().finish()),
+        None => return Ok(HttpResponse::BadRequest().body("unknown username")),
         Some(u) => u,
     };
 
-    if user.attempts()? > 3 {
+    if user.attempts()? >= 3 {
         return Ok(HttpResponse::Forbidden().body("try again after 1 minute"));
     }
 
