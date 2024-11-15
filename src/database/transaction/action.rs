@@ -6,17 +6,45 @@ use serde::{Deserialize, Serialize};
 
 type Value = (Decimal, AssetId);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum TxnAction {
-    Deposit(Deposit),
-    Withdrawal(Withdrawal),
-    Income(Income),
-    Fee(Fee),
-    Buy(Buy),
-    Sell(Sell),
-    Dividend(Dividend),
-    Journal(Journal),
+    Deposit {
+        value: Value,
+        fee: Value,
+    },
+    Withdrawal {
+        value: Value,
+        fee: Value,
+    },
+    Income {
+        value: Value,
+        reason: String,
+    },
+    Fee {
+        value: Value,
+        reason: String,
+    },
+    Buy {
+        asset: Value,
+        cash: Value,
+        fee: Value,
+    },
+    Sell {
+        asset: Value,
+        cash: Value,
+        fee: Value,
+    },
+    Dividend {
+        source: AssetId,
+        value: Value,
+        fee: Value,
+    },
+    Journal {
+        source: AssetId,
+        target: AssetId,
+        fee: Value,
+    },
 }
 
 impl From<TxnAction> for sea_query::value::Value {
@@ -37,56 +65,4 @@ impl FromSql for TxnAction {
 
         Err(FromSqlError::InvalidType)
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Deposit {
-    pub value: Value,
-    pub fee: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Withdrawal {
-    pub value: Value,
-    pub fee: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Income {
-    pub value: Value,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Fee {
-    pub value: Value,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Buy {
-    pub asset: Value,
-    pub cash: Value,
-    pub fee: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Sell {
-    pub asset: Value,
-    pub cash: Value,
-    pub fee: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Dividend {
-    pub source: AssetId,
-    pub value: Value,
-    pub fee: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Journal {
-    pub source: AssetId,
-    pub target: AssetId,
-    pub fee: Value,
 }
