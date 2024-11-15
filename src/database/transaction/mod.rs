@@ -42,6 +42,15 @@ impl TryFrom<&Row<'_>> for Transaction {
 }
 
 impl Transaction {
+    pub fn new(account: Uuid, date: NaiveDate, action: TxnAction) -> Self {
+        Self {
+            id: Uuid::nil(),
+            account,
+            date,
+            action: action.clone(),
+        }
+    }
+
     pub fn account(&self) -> Option<super::Account> {
         match super::Account::by_id(self.account) {
             Ok(Some(account)) => Some(account),
@@ -97,9 +106,10 @@ impl Transaction {
         Ok(record?)
     }
 
-    pub fn insert(&self) -> Result<(), ServerError> {
+    pub fn insert(&self) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
+        let id = Uuid::new_v4();
         let (query, values) = Query::insert()
             .into_table(TransactionIden::Table)
             .columns([
@@ -109,7 +119,7 @@ impl Transaction {
                 TransactionIden::Action,
             ])
             .values([
-                Uuid::new_v4().into(),
+                id.into(),
                 self.account.into(),
                 self.date.into(),
                 self.action.clone().into(),
@@ -118,7 +128,7 @@ impl Transaction {
 
         let connection = Connection::open(DATABASE)?;
         connection.execute(&query, &*values.as_params())?;
-        Ok(())
+        Ok(id)
     }
 
     pub fn update(&self) -> Result<(), ServerError> {
@@ -137,14 +147,156 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn delete(&self) -> Result<(), ServerError> {
+    pub fn delete(id: Uuid) -> Result<(), ServerError> {
         let (query, values) = Query::delete()
             .from_table(TransactionIden::Table)
-            .and_where(Expr::col(TransactionIden::Id).eq(self.id))
+            .and_where(Expr::col(TransactionIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
         let connection = Connection::open(DATABASE)?;
         connection.execute(&query, &*values.as_params())?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::account::AccountKind;
+    use crate::database::asset::AssetId;
+    use crate::database::{self, Account, User};
+    use rust_decimal_macros::dec;
+    use sha2::{Digest, Sha256};
+
+    #[test]
+    fn test_insert_and_select() {
+        database::init().expect("database initialization fail");
+
+        let mut u0 = User::new(
+            String::from("test_user_t0"),
+            Sha256::digest("password").to_vec(),
+        );
+        u0.id = u0.insert().expect("panic");
+
+        let mut a0 =
+            Account::new("test_acct_t0", "alias", u0.id, AccountKind::NRA);
+        a0.id = a0.insert().expect("panic");
+
+        let mut t0 = Transaction::new(
+            a0.id,
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Deposit {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t0.id = t0.insert().expect("panic");
+
+        let t1 = Transaction::by_id(t0.id).expect("panic").expect("panic");
+        assert_eq!(t0.id, t1.id);
+        assert_eq!(t0.date, t1.date);
+        assert_eq!(t0.action, t1.action);
+
+        let mut t2 = Transaction::new(
+            a0.id,
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Withdrawal {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t2.id = t2.insert().expect("panic");
+
+        let t3 = Transaction::by_account(a0.id).expect("panic");
+        assert!(t3.contains(&t0));
+        assert!(t3.contains(&t2));
+
+        // clean up
+        User::delete(u0.id).expect("test clean-up fail");
+    }
+
+    #[test]
+    fn test_no_account() {
+        database::init().expect("database initialization fail");
+
+        let t1 = Transaction::new(
+            Uuid::nil(),
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Withdrawal {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t1.insert()
+            .expect_err("insert transaction with invalid account");
+    }
+
+    #[test]
+    fn test_update() {
+        database::init().expect("database initialization fail");
+
+        let mut u0 = User::new(
+            String::from("test_user_t1"),
+            Sha256::digest("password").to_vec(),
+        );
+        u0.id = u0.insert().expect("panic");
+
+        let mut a0 =
+            Account::new("test_acct_t1", "alias", u0.id, AccountKind::NRA);
+        a0.id = a0.insert().expect("panic");
+
+        let mut t0 = Transaction::new(
+            a0.id,
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Deposit {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t0.id = t0.insert().expect("panic");
+
+        t0.date = NaiveDate::from_ymd_opt(2021, 1, 1).unwrap();
+        t0.update().expect("panic");
+        let t1 = Transaction::by_id(t0.id).expect("panic").expect("panic");
+        assert_eq!(t0.date, t1.date);
+
+        t0.action = TxnAction::Fee {
+            value: (dec!(1.0), AssetId::currency("CAD")),
+            reason: String::from("Management Fee"),
+        };
+        t0.update().expect("panic");
+        let t1 = Transaction::by_id(t0.id).expect("panic").expect("panic");
+        assert_eq!(t0.date, t1.date);
+
+        // clean up
+        User::delete(u0.id).expect("test clean-up fail");
+    }
+
+    #[test]
+    fn test_delete() {
+        database::init().expect("database initialization fail");
+
+        let mut u0 = User::new(
+            String::from("test_user_t2"),
+            Sha256::digest("password").to_vec(),
+        );
+        u0.id = u0.insert().expect("panic");
+
+        let mut a0 =
+            Account::new("test_acct_t2", "alias", u0.id, AccountKind::NRA);
+        a0.id = a0.insert().expect("panic");
+
+        let mut t0 = Transaction::new(
+            a0.id,
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Deposit {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t0.id = t0.insert().expect("panic");
+
+        Transaction::delete(t0.id).expect("panic");
+        assert_eq!(None, Transaction::by_id(t0.id).expect("panic"));
     }
 }
