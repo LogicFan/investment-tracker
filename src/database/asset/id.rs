@@ -12,6 +12,30 @@ pub enum AssetId {
     UNKNOWN(String),
 }
 
+impl AssetId {
+    pub fn stock(
+        exchange: impl Into<String>,
+        ticker: impl Into<String>,
+    ) -> Self {
+        return Self::STOCK {
+            exchange: exchange.into(),
+            ticker: ticker.into(),
+        };
+    }
+
+    pub fn currency(symbol: impl Into<String>) -> Self {
+        return Self::CURRENCY(symbol.into());
+    }
+
+    pub fn crypto(symbol: impl Into<String>) -> Self {
+        return Self::CRYPTO(symbol.into());
+    }
+
+    pub fn unknown(symbol: impl Into<String>) -> Self {
+        return Self::UNKNOWN(symbol.into());
+    }
+}
+
 impl From<String> for AssetId {
     fn from(value: String) -> Self {
         let mut iter = value.split(":");
@@ -20,13 +44,10 @@ impl From<String> for AssetId {
         let symbol = split[1];
 
         match kind {
-            "CURRENCY" => Self::CURRENCY(String::from(symbol)),
-            "CRYPTO" => Self::CRYPTO(String::from(symbol)),
-            "UNKNOWN" => Self::UNKNOWN(String::from(symbol)),
-            s => Self::STOCK {
-                exchange: String::from(&s[1..s.len()]),
-                ticker: String::from(symbol),
-            },
+            "CURRENCY" => Self::currency(symbol),
+            "CRYPTO" => Self::crypto(symbol),
+            "UNKNOWN" => Self::unknown(symbol),
+            s => Self::stock(&s[1..s.len()], symbol),
         }
     }
 }
