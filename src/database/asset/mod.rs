@@ -103,7 +103,11 @@ impl Asset {
             ])
             .from(AssetIden::Table)
             .and_where(Expr::col(AssetIden::AssetId).eq(asset))
-            .and_where(Expr::col(AssetIden::Owner).eq(owner))
+            .and_where(
+                owner
+                    .map(|x| Expr::col(AssetIden::Owner).eq(x))
+                    .unwrap_or(Expr::col(AssetIden::Owner).is_null()),
+            )
             .build_rusqlite(SqliteQueryBuilder);
 
         let mut statement = connection.prepare(&query)?;
@@ -138,7 +142,7 @@ impl Asset {
     }
 
     pub fn search(
-        query: String,
+        query: impl Into<String>,
         owner: Uuid,
         connection: &mut Connection,
     ) -> Result<Vec<Self>, ServerError> {
@@ -156,7 +160,7 @@ impl Asset {
                     .add(Expr::col(AssetIden::Owner).is_null()),
             )
             .and_where(
-                Expr::col(AssetIden::AssetId).like(format!("%:{}%", query)),
+                Expr::col(AssetIden::AssetId).like(format!("%:{}%", query.into())),
             )
             .limit(10)
             .build_rusqlite(SqliteQueryBuilder);
@@ -228,30 +232,76 @@ mod tests {
             Asset::new(AssetId::currency("CAD"), "Canadian Dollar", None);
         a0.id = a0.insert(&mut connection).expect("panic");
 
-        let a1 = Asset::by_id(a0.id, &mut connection)
+        let res = Asset::by_id(a0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(a0.id, a1.id);
-        assert_eq!(a0.asset_id, a1.asset_id);
-        assert_eq!(a0.name, a1.name);
-        assert_eq!(a0.name, a1.name);
+        assert_eq!(a0.id, res.id);
+        assert_eq!(a0.asset_id, res.asset_id);
+        assert_eq!(a0.name, res.name);
+        assert_eq!(a0.name, res.name);
 
-        let mut a2 = Asset::new(
+        let res = Asset::by_asset(a0.asset_id.clone(), None, &mut connection)
+            .expect("panic")
+            .expect("panic");
+        assert_eq!(a0.id, res.id);
+        assert_eq!(a0.asset_id, res.asset_id);
+        assert_eq!(a0.name, res.name);
+        assert_eq!(a0.name, res.name);
+
+        let mut a1 = Asset::new(
             AssetId::unknown("TDB2606"),
             "TD Global Tactical Monthly Income Fund - H8",
             Some(u0.id),
         );
-        a2.id = a2.insert(&mut connection).expect("panic");
+        a1.id = a1.insert(&mut connection).expect("panic");
 
-        let mut a3 = Asset::new(
+        let res = Asset::by_id(a1.id, &mut connection)
+            .expect("panic")
+            .expect("panic");
+        assert_eq!(a1.id, res.id);
+        assert_eq!(a1.asset_id, res.asset_id);
+        assert_eq!(a1.name, res.name);
+        assert_eq!(a1.name, res.name);
+
+        let res =
+            Asset::by_asset(a1.asset_id.clone(), a1.owner, &mut connection)
+                .expect("panic")
+                .expect("panic");
+        assert_eq!(a1.id, res.id);
+        assert_eq!(a1.asset_id, res.asset_id);
+        assert_eq!(a1.name, res.name);
+        assert_eq!(a1.name, res.name);
+
+        let mut a2 = Asset::new(
             AssetId::unknown("TDB627"),
             "TD Dividend Income Fund - I",
             Some(u0.id),
         );
-        a3.id = a3.insert(&mut connection).expect("panic");
+        a2.id = a2.insert(&mut connection).expect("panic");
 
-        // let a4 = Account::by_owner(u0.id, &mut connection).expect("panic");
-        // assert!(a4.contains(&a0));
-        // assert!(a4.contains(&a1));
+        let res = Asset::by_owner(u0.id, &mut connection).expect("panic");  
+        assert!(!res.contains(&a0));
+        assert!(res.contains(&a1));
+        assert!(res.contains(&a2));
+
+        let res = Asset::search("", u0.id, &mut connection).unwrap();
+        assert!(res.contains(&a0));
+        assert!(res.contains(&a1));
+        assert!(res.contains(&a2));
+
+        let res = Asset::search("", Uuid::nil(), &mut connection).unwrap();
+        assert!(res.contains(&a0));
+        assert!(!res.contains(&a1));
+        assert!(!res.contains(&a2));
+
+        let res = Asset::search("C", u0.id, &mut connection).unwrap();
+        assert!(res.contains(&a0));
+        assert!(!res.contains(&a1));
+        assert!(!res.contains(&a2));
+
+        let res = Asset::search("TDB6", u0.id, &mut connection).unwrap();
+        assert!(!res.contains(&a0));
+        assert!(!res.contains(&a1));
+        assert!(res.contains(&a2));
     }
 }
