@@ -298,5 +298,8 @@ mod tests {
 
         Transaction::delete(t0.id).expect("panic");
         assert_eq!(None, Transaction::by_id(t0.id).expect("panic"));
+
+        // clean up
+        User::delete(u0.id).expect("test clean-up fail");
     }
 }
