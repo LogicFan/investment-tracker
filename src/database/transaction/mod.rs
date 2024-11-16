@@ -207,14 +207,14 @@ mod tests {
         );
         t0.id = t0.insert(&mut connection).expect("panic");
 
-        let t1 = Transaction::by_id(t0.id, &mut connection)
+        let res = Transaction::by_id(t0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(t0.id, t1.id);
-        assert_eq!(t0.date, t1.date);
-        assert_eq!(t0.action, t1.action);
+        assert_eq!(t0.id, res.id);
+        assert_eq!(t0.date, res.date);
+        assert_eq!(t0.action, res.action);
 
-        let mut t2 = Transaction::new(
+        let mut t1 = Transaction::new(
             a0.id,
             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
             TxnAction::Withdrawal {
@@ -222,12 +222,12 @@ mod tests {
                 fee: (dec!(0.0), AssetId::currency("CAD")),
             },
         );
-        t2.id = t2.insert(&mut connection).expect("panic");
+        t1.id = t1.insert(&mut connection).expect("panic");
 
-        let t3 =
+        let res =
             Transaction::by_account(a0.id, &mut connection).expect("panic");
-        assert!(t3.contains(&t0));
-        assert!(t3.contains(&t2));
+        assert!(res.contains(&t0));
+        assert!(res.contains(&t1));
     }
 
     #[test]
@@ -278,20 +278,20 @@ mod tests {
 
         t0.date = NaiveDate::from_ymd_opt(2021, 1, 1).unwrap();
         t0.update(&mut connection).expect("panic");
-        let t1 = Transaction::by_id(t0.id, &mut connection)
+        let res = Transaction::by_id(t0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(t0.date, t1.date);
+        assert_eq!(t0.date, res.date);
 
         t0.action = TxnAction::Fee {
             value: (dec!(1.0), AssetId::currency("CAD")),
             reason: String::from("Management Fee"),
         };
         t0.update(&mut connection).expect("panic");
-        let t1 = Transaction::by_id(t0.id, &mut connection)
+        let res = Transaction::by_id(t0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(t0.date, t1.date);
+        assert_eq!(t0.date, res.date);
     }
 
     #[test]
