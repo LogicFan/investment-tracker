@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_delete() {
-        // use database::account::{Account, AccountKind};
+        use database::account::{Account, AccountKind};
         // use database::asset::AssetId;
         // use database::transaction::{Transaction, TxnAction};
 
@@ -336,9 +336,9 @@ mod tests {
             User::new("test_user", Sha256::digest("password").to_vec());
         u0.id = u0.insert(&mut connection).expect("panic");
 
-        // let mut a0 =
-        //     Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-        // a0.id = a0.insert().expect("panic");
+        let mut a0 =
+            Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+        a0.id = a0.insert(&mut connection).expect("panic");
 
         // let mut t0 = Transaction::new(
         //     a0.id,
@@ -354,7 +354,10 @@ mod tests {
 
         User::delete(u0.id, &mut connection).expect("panic");
         // assert_eq!(None, Transaction::by_id(t0.id).expect("panic"));
-        // assert_eq!(None, Account::by_id(a0.id).expect("panic"));
+        assert_eq!(
+            None,
+            Account::by_id(a0.id, &mut connection).expect("panic")
+        );
         assert_eq!(None, User::by_id(u0.id, &mut connection).expect("panic"));
     }
 

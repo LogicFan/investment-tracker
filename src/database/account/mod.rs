@@ -1,13 +1,14 @@
 mod kind;
 
-use super::new_connection;
 use crate::error::ServerError;
+use crate::user::authenticate;
 use core::str;
 pub use kind::AccountKind;
-use rusqlite::Row;
+use rusqlite::{Connection, Row};
 use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
+use std::time::SystemTimeError;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -59,16 +60,19 @@ impl Account {
         }
     }
 
-    // pub fn owner(&self) -> Option<super::User> {
-    //     match super::User::by_id(self.owner) {
-    //         Ok(Some(user)) => Some(user),
-    //         _ => None,
-    //     }
-    // }
+    pub fn owner(&self, connection: &mut Connection) -> Option<super::User> {
+        match super::User::by_id(self.owner, connection) {
+            Ok(Some(user)) => Some(user),
+            _ => None,
+        }
+    }
 }
 
 impl Account {
-    pub fn by_id(id: Uuid) -> Result<Option<Account>, ServerError> {
+    pub fn by_id(
+        id: Uuid,
+        connection: &mut Connection,
+    ) -> Result<Option<Account>, ServerError> {
         let (query, values) = Query::select()
             .columns([
                 AccountIden::Id,
@@ -81,7 +85,6 @@ impl Account {
             .and_where(Expr::col(AccountIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         let mut statement = connection.prepare(&query)?;
         let record: Option<Result<_, rusqlite::Error>> = statement
             .query_and_then(&*values.as_params(), |row| Account::try_from(row))?
@@ -90,7 +93,10 @@ impl Account {
         Ok(record.transpose()?)
     }
 
-    pub fn by_owner(owner: Uuid) -> Result<Vec<Account>, ServerError> {
+    pub fn by_owner(
+        owner: Uuid,
+        connection: &mut Connection,
+    ) -> Result<Vec<Account>, ServerError> {
         let (query, values) = Query::select()
             .columns([
                 AccountIden::Id,
@@ -103,7 +109,6 @@ impl Account {
             .and_where(Expr::col(AccountIden::Owner).eq(owner))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         let mut statement = connection.prepare(&query)?;
         let record: Result<Vec<_>, rusqlite::Error> = statement
             .query_and_then(&*values.as_params(), |row| Account::try_from(row))?
@@ -112,7 +117,32 @@ impl Account {
         Ok(record?)
     }
 
-    pub fn insert(&self) -> Result<Uuid, ServerError> {
+    pub fn delete(
+        id: Uuid,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
+        use super::transaction::TransactionIden;
+        let (query1, values1) = Query::delete()
+            .from_table(TransactionIden::Table)
+            .and_where(Expr::col(TransactionIden::Account).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let (query2, values2) = Query::delete()
+            .from_table(AccountIden::Table)
+            .and_where(Expr::col(AccountIden::Id).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let transaction = connection.transaction()?;
+        transaction.execute(&query1, &*values1.as_params())?;
+        transaction.execute(&query2, &*values2.as_params())?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn insert(
+        &self,
+        connection: &mut Connection,
+    ) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
         let id = Uuid::new_v4();
@@ -134,12 +164,14 @@ impl Account {
             ])?
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         connection.execute(&query, &*values.as_params())?;
         Ok(id)
     }
 
-    pub fn update(&self) -> Result<(), ServerError> {
+    pub fn update(
+        &self,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(AccountIden::Table)
             .values([
@@ -151,138 +183,152 @@ impl Account {
             .and_where(Expr::col(AccountIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         connection.execute(&query, &*values.as_params())?;
-        Ok(())
-    }
-
-    pub fn delete(id: Uuid) -> Result<(), ServerError> {
-        use super::transaction::TransactionIden;
-        let (query1, values1) = Query::delete()
-            .from_table(TransactionIden::Table)
-            .and_where(Expr::col(TransactionIden::Account).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let (query2, values2) = Query::delete()
-            .from_table(AccountIden::Table)
-            .and_where(Expr::col(AccountIden::Id).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let mut connection = new_connection()?;
-        let transaction = connection.transaction()?;
-        transaction.execute(&query1, &*values1.as_params())?;
-        transaction.execute(&query2, &*values2.as_params())?;
-        transaction.commit()?;
         Ok(())
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::database::{self, User};
-//     use sha2::{Digest, Sha256};
+impl Account {
+    pub fn has_permission(
+        &self,
+        token: &String,
+        _: &mut Connection,
+    ) -> Result<bool, SystemTimeError> {
+        Ok(authenticate(&token)?
+            .map(|user_id| self.owner == user_id)
+            .unwrap_or(false))
+    }
 
-//     #[test]
-//     fn test_insert_and_select() {
-//         database::init().expect("database initialization fail");
+    pub fn validate_input(&self, _: &mut Connection) -> Option<&'static str> {
+        if self.name.len() < 4 {
+            Some("account name too short")
+        } else if self.alias.len() < 4 {
+            Some("account alias too short")
+        } else {
+            None
+        }
+    }
+}
 
-//         let mut u0 = User::new(
-//             String::from("test_user_a0"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert().expect("panic");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::{self, User};
+    use sha2::{Digest, Sha256};
 
-//         let mut a1 =
-//             Account::new("test_acct_a0", "alias", u0.id, AccountKind::NRA);
-//         a1.id = a1.insert().expect("panic");
+    #[test]
+    fn test_insert_and_select() {
+        let mut connection =
+            Connection::open_in_memory().expect("fail to create database");
+        database::migration::run_migration(&mut connection)
+            .expect("database initialization fail");
 
-//         let mut a2 =
-//             Account::new("test_acct_a1", "alias2", u0.id, AccountKind::TFSA);
-//         a2.id = a2.insert().expect("panic");
+        let mut u0 = User::new(
+            String::from("test_user"),
+            Sha256::digest("password").to_vec(),
+        );
+        u0.id = u0.insert(&mut connection).expect("panic");
 
-//         let a3 = Account::by_id(a1.id).expect("panic").expect("panic");
-//         assert_eq!(a1.id, a3.id);
-//         assert_eq!(a1.name, a3.name);
-//         assert_eq!(a1.alias, a3.alias);
-//         assert_eq!(a1.owner, a3.owner);
-//         assert_eq!(a1.kind, a3.kind);
+        let mut a0 =
+            Account::new("test_account_0", "alias", u0.id, AccountKind::NRA);
+        a0.id = a0.insert(&mut connection).expect("panic");
 
-//         let a4 = Account::by_owner(u0.id).expect("panic");
-//         assert!(a4.contains(&a1));
-//         assert!(a4.contains(&a2));
+        let mut a1 =
+            Account::new("test_account_1", "alias2", u0.id, AccountKind::TFSA);
+        a1.id = a1.insert(&mut connection).expect("panic");
 
-//         // clean up
-//         User::delete(u0.id).expect("test clean-up fail");
-//     }
+        let a2 = Account::by_id(a0.id, &mut connection)
+            .expect("panic")
+            .expect("panic");
+        assert_eq!(a0.id, a2.id);
+        assert_eq!(a0.name, a2.name);
+        assert_eq!(a0.alias, a2.alias);
+        assert_eq!(a0.owner, a2.owner);
+        assert_eq!(a0.kind, a2.kind);
 
-//     #[test]
-//     fn test_no_owner() {
-//         database::init().expect("database initialization fail");
+        let a4 = Account::by_owner(u0.id, &mut connection).expect("panic");
+        assert!(a4.contains(&a0));
+        assert!(a4.contains(&a1));
+    }
 
-//         let a1 = Account::new(
-//             "test_acct_a0",
-//             "alias",
-//             Uuid::nil(),
-//             AccountKind::NRA,
-//         );
-//         a1.insert().expect_err("insert account with invalid owner");
-//     }
+    #[test]
+    fn test_no_owner() {
+        let mut connection =
+            Connection::open_in_memory().expect("fail to create database");
+        database::migration::run_migration(&mut connection)
+            .expect("database initialization fail");
 
-//     #[test]
-//     fn test_update() {
-//         database::init().expect("database initialization fail");
+        let a0 = Account::new(
+            "test_account",
+            "alias",
+            Uuid::nil(),
+            AccountKind::NRA,
+        );
+        a0.insert(&mut connection)
+            .expect_err("insert account with invalid owner");
+    }
 
-//         let mut u0 = User::new(
-//             String::from("test_user_a1"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert().expect("panic");
+    #[test]
+    fn test_update() {
+        let mut connection =
+            Connection::open_in_memory().expect("fail to create database");
+        database::migration::run_migration(&mut connection)
+            .expect("database initialization fail");
 
-//         let mut a1 =
-//             Account::new("test_acct_a0", "alias", u0.id, AccountKind::NRA);
-//         a1.id = a1.insert().expect("panic");
+        let mut u0 = User::new(
+            String::from("test_user"),
+            Sha256::digest("password").to_vec(),
+        );
+        u0.id = u0.insert(&mut connection).expect("panic");
 
-//         a1.name = String::from("test_acct_a1");
-//         a1.update().expect("panic");
-//         let a2 = Account::by_id(a1.id).expect("panic").expect("panic");
-//         assert_eq!(a1.name, a2.name);
+        let mut a0 =
+            Account::new("test_account_0", "alias", u0.id, AccountKind::NRA);
+        a0.id = a0.insert(&mut connection).expect("panic");
 
-//         a1.alias = String::from("alias2");
-//         a1.update().expect("panic");
-//         let a2 = Account::by_id(a1.id).expect("panic").expect("panic");
-//         assert_eq!(a1.alias, a2.alias);
+        a0.name = String::from("test_account_1");
+        a0.update(&mut connection).expect("panic");
+        let a1 = Account::by_id(a0.id, &mut connection)
+            .expect("panic")
+            .expect("panic");
+        assert_eq!(a0.name, a1.name);
 
-//         a1.kind = AccountKind::TFSA;
-//         a1.update().expect("panic");
-//         let a2 = Account::by_id(a1.id).expect("panic").expect("panic");
-//         assert_eq!(a1.kind, a2.kind);
+        a0.alias = String::from("alias2");
+        a0.update(&mut connection).expect("panic");
+        let a2 = Account::by_id(a0.id, &mut connection)
+            .expect("panic")
+            .expect("panic");
+        assert_eq!(a0.alias, a2.alias);
 
-//         // clean up
-//         User::delete(u0.id).expect("test clean-up fail");
-//     }
+        a0.kind = AccountKind::TFSA;
+        a0.update(&mut connection).expect("panic");
+        let a3 = Account::by_id(a0.id, &mut connection)
+            .expect("panic")
+            .expect("panic");
+        assert_eq!(a0.kind, a3.kind);
+    }
 
-//     #[test]
-//     fn test_delete() {
-//         // TODO: test delete account also delete transaction
-//         database::init().expect("database initialization fail");
+    #[test]
+    fn test_delete() {
+        // TODO: test account attached transaction
 
-//         let mut u0 = User::new(
-//             String::from("test_user_a2"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert().expect("panic");
+        let mut connection =
+            Connection::open_in_memory().expect("fail to create database");
+        database::migration::run_migration(&mut connection)
+            .expect("database initialization fail");
 
-//         let mut a1 =
-//             Account::new("test_acct_a0", "alias", u0.id, AccountKind::NRA);
-//         a1.id = a1.insert().expect("panic");
-//         Account::delete(a1.id).expect("panic");
-//         assert_eq!(None, Account::by_id(a1.id).expect("panic"));
+        let mut u0 = User::new(
+            String::from("test_user"),
+            Sha256::digest("password").to_vec(),
+        );
+        u0.id = u0.insert(&mut connection).expect("panic");
 
-//         let mut a2 =
-//             Account::new("test_acct_a1", "alias", u0.id, AccountKind::NRA);
-//         a2.id = a2.insert().expect("panic");
-//         User::delete(u0.id).expect("panic");
-//         assert_eq!(None, Account::by_id(a2.id).expect("panic"));
-//     }
-// }
+        let mut a1 =
+            Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+        a1.id = a1.insert(&mut connection).expect("panic");
+        Account::delete(a1.id, &mut connection).expect("panic");
+        assert_eq!(
+            None,
+            Account::by_id(a1.id, &mut connection).expect("panic")
+        );
+    }
+}

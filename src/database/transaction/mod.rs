@@ -4,7 +4,7 @@ use super::new_connection;
 use crate::error::ServerError;
 pub use action::TxnAction;
 use chrono::NaiveDate;
-use rusqlite::Row;
+use rusqlite::{Connection, Row};
 use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
@@ -51,8 +51,11 @@ impl Transaction {
         }
     }
 
-    pub fn account(&self) -> Option<super::Account> {
-        match super::Account::by_id(self.account) {
+    pub fn account(
+        &self,
+        connection: &mut Connection,
+    ) -> Option<super::Account> {
+        match super::Account::by_id(self.account, connection) {
             Ok(Some(account)) => Some(account),
             _ => None,
         }
