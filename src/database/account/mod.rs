@@ -215,18 +215,18 @@ mod tests {
             Account::new("test_account_1", "alias2", u0.id, AccountKind::TFSA);
         a1.id = a1.insert(&mut connection).expect("panic");
 
-        let a2 = Account::by_id(a0.id, &mut connection)
+        let res = Account::by_id(a0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(a0.id, a2.id);
-        assert_eq!(a0.name, a2.name);
-        assert_eq!(a0.alias, a2.alias);
-        assert_eq!(a0.owner, a2.owner);
-        assert_eq!(a0.kind, a2.kind);
+        assert_eq!(a0.id, res.id);
+        assert_eq!(a0.name, res.name);
+        assert_eq!(a0.alias, res.alias);
+        assert_eq!(a0.owner, res.owner);
+        assert_eq!(a0.kind, res.kind);
 
-        let a4 = Account::by_owner(u0.id, &mut connection).expect("panic");
-        assert!(a4.contains(&a0));
-        assert!(a4.contains(&a1));
+        let res = Account::by_owner(u0.id, &mut connection).expect("panic");
+        assert!(res.contains(&a0));
+        assert!(res.contains(&a1));
     }
 
     #[test]
@@ -265,24 +265,24 @@ mod tests {
 
         a0.name = String::from("test_account_1");
         a0.update(&mut connection).expect("panic");
-        let a1 = Account::by_id(a0.id, &mut connection)
+        let res = Account::by_id(a0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(a0.name, a1.name);
+        assert_eq!(a0.name, res.name);
 
         a0.alias = String::from("alias2");
         a0.update(&mut connection).expect("panic");
-        let a2 = Account::by_id(a0.id, &mut connection)
+        let res = Account::by_id(a0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(a0.alias, a2.alias);
+        assert_eq!(a0.alias, res.alias);
 
         a0.kind = AccountKind::TFSA;
         a0.update(&mut connection).expect("panic");
-        let a3 = Account::by_id(a0.id, &mut connection)
+        let res = Account::by_id(a0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(a0.kind, a3.kind);
+        assert_eq!(a0.kind, res.kind);
     }
 
     #[test]
