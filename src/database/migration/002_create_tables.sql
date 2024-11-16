@@ -2,7 +2,6 @@ CREATE TABLE IF NOT EXISTS `asset` (
     `id` TEXT PRIMARY KEY NOT NULL,
     `asset_id` TEXT NOT NULL,
     `name` TEXT NOT NULL,
-    `extra` TEXT NOT NULL,
     `owner` TEXT REFERENCES `user` (`id`) DEFAULT NULL,
     UNIQUE (`asset_id`, `owner`)
 );

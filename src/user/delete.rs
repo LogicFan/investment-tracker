@@ -1,4 +1,4 @@
-use crate::database::User;
+use crate::database::{connection, User};
 use crate::error::ServerError;
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -17,6 +17,8 @@ struct RequestData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
+    let mut connection = connection()?;
+
     let id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
@@ -24,7 +26,7 @@ pub async fn handler(
     if id != request.id {
         return Ok(HttpResponse::Forbidden().finish());
     }
-    let user = match User::by_id(request.id)? {
+    let user = match User::by_id(request.id, &mut connection)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
@@ -32,6 +34,6 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    User::delete(user.id)?;
+    User::delete(user.id, &mut connection)?;
     Ok(HttpResponse::Ok().finish())
 }

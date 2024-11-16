@@ -1,12 +1,10 @@
-use super::DATABASE;
 use crate::error::ServerError;
 use log::info;
 use rusqlite::Connection;
 
 const VERSION: u32 = 2;
 
-pub fn run_migration() -> Result<(), ServerError> {
-    let mut connection = Connection::open(DATABASE)?;
+pub fn run_migration(connection: &mut Connection) -> Result<(), ServerError> {
     let transaction = connection.transaction()?;
 
     let mut version =

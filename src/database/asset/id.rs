@@ -1,3 +1,5 @@
+use core::str;
+use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -82,5 +84,23 @@ impl<'de> Deserialize<'de> for AssetId {
     {
         let value = String::deserialize(deserializer)?;
         Ok(AssetId::from(value))
+    }
+}
+
+impl From<AssetId> for sea_query::value::Value {
+    fn from(value: AssetId) -> Self {
+        String::from(value).into()
+    }
+}
+
+impl FromSql for AssetId {
+    fn column_result(value: ValueRef<'_>) -> Result<Self, FromSqlError> {
+        if let ValueRef::Text(text) = value {
+            if let Ok(s) = str::from_utf8(text) {
+                return Ok(AssetId::from(String::from(s)).into());
+            }
+        }
+
+        Err(FromSqlError::InvalidType)
     }
 }

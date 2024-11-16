@@ -1,5 +1,5 @@
 use super::PRIVATE_KEY;
-use crate::database::User;
+use crate::database::{connection, User};
 use crate::error::ServerError;
 use crate::user::Claims;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -24,17 +24,22 @@ struct ResponseData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let user = match User::by_username(request.username.clone())? {
-        None => return Ok(HttpResponse::BadRequest().body("unknown username")),
-        Some(u) => u,
-    };
+    let mut connection = connection()?;
 
-    if user.attempts()? >= 3 {
+    let user =
+        match User::by_username(request.username.clone(), &mut connection)? {
+            None => {
+                return Ok(HttpResponse::BadRequest().body("unknown username"))
+            }
+            Some(u) => u,
+        };
+
+    if user.attempts(&mut connection)? >= 3 {
         return Ok(HttpResponse::Forbidden().body("try again after 1 minute"));
     }
 
     if Sha256::digest(request.password.clone()).to_vec() != user.password {
-        user.add_attempt()?;
+        user.add_attempt(&mut connection)?;
         return Ok(HttpResponse::Forbidden().body("incorrect password"));
     }
 
