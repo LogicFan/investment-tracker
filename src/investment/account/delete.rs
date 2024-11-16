@@ -1,5 +1,6 @@
 use crate::database::{connection, Account};
 use crate::error::ServerError;
+use crate::investment::account::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -24,7 +25,7 @@ pub async fn handler(
         Some(a) => a,
     };
 
-    if !account.has_permission(&request.token, &mut connection)? {
+    if !authenticate(&account, &request.token, &mut connection)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 

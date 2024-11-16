@@ -1,5 +1,6 @@
 use crate::database::{connection, Account};
 use crate::error::ServerError;
+use crate::investment::account::{authenticate, validate};
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
 
@@ -22,13 +23,14 @@ pub async fn handler(
         Some(a) => a,
     };
 
-    if !account.has_permission(&request.token, &mut connection)? {
+    if !authenticate(&account, &request.token, &mut connection)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
     if request.account.owner != account.owner {
         return Ok(HttpResponse::BadRequest().body("owner cannot be modified"));
-    } else if let Some(err) = request.account.validate_input(&mut connection) {
+    } else if let Some(err) = validate(&request.account, &mut connection)
+    {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 

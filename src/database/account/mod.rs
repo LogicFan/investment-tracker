@@ -188,28 +188,6 @@ impl Account {
     }
 }
 
-impl Account {
-    pub fn has_permission(
-        &self,
-        token: &String,
-        _: &mut Connection,
-    ) -> Result<bool, SystemTimeError> {
-        Ok(authenticate(&token)?
-            .map(|user_id| self.owner == user_id)
-            .unwrap_or(false))
-    }
-
-    pub fn validate_input(&self, _: &mut Connection) -> Option<&'static str> {
-        if self.name.len() < 4 {
-            Some("account name too short")
-        } else if self.alias.len() < 4 {
-            Some("account alias too short")
-        } else {
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
