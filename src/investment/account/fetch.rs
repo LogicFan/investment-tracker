@@ -1,3 +1,4 @@
+use crate::database::connection;
 use crate::{database::Account, error::ServerError};
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -12,11 +13,13 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
+    let mut connection = connection()?;
+
     let user_id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i
     };
 
-    let accounts = Account::by_owner(user_id)?;
+    let accounts = Account::by_owner(user_id, &mut connection)?;
     Ok(HttpResponse::Ok().json(accounts))
 }

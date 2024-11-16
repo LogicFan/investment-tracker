@@ -1,5 +1,4 @@
-use super::{validate_input, has_permission};
-use crate::database::Account;
+use crate::database::{connection, Account};
 use crate::error::ServerError;
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -14,17 +13,22 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    if !has_permission(&request.account, &request.token)? {
+    let mut connection = connection()?;
+
+    if !request
+        .account
+        .has_permission(&request.token, &mut connection)?
+    {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
     // input check
     if !request.account.id.is_nil() {
         return Ok(HttpResponse::BadRequest().body("account id should be nil"));
-    } else if let Some(err) = validate_input(&request.account) {
+    } else if let Some(err) = request.account.validate_input(&mut connection) {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.account.insert()?;
+    request.account.insert(&mut connection)?;
     Ok(HttpResponse::Ok().finish())
 }

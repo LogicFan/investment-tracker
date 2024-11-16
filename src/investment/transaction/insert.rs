@@ -1,5 +1,5 @@
 use super::validate_input;
-use crate::database::{Account, Transaction};
+use crate::database::{connection, Account, Transaction};
 use crate::error::ServerError;
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -15,12 +15,17 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let account = match Account::by_id(request.transaction.account)? {
-        None => {
-            return Ok(HttpResponse::BadRequest().body("account does not exist"))
-        }
-        Some(a) => a,
-    };
+    let mut connection = connection()?;
+
+    let account =
+        match Account::by_id(request.transaction.account, &mut connection)? {
+            None => {
+                return Ok(
+                    HttpResponse::BadRequest().body("account does not exist")
+                )
+            }
+            Some(a) => a,
+        };
 
     // permission check
     match authenticate(&request.token)? {
@@ -32,7 +37,7 @@ pub async fn handler(
         return Ok(
             HttpResponse::BadRequest().body("transaction id should be nil")
         );
-    } else if let Some(err) = validate_input(&request.transaction) {
+    } else if let Some(err) = validate_input(&request.transaction, &mut connection) {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 

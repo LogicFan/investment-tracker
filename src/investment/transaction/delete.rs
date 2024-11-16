@@ -1,5 +1,5 @@
 use super::has_permission;
-use crate::database::Transaction;
+use crate::database::{connection, Transaction};
 use crate::error::ServerError;
 use actix_web::{post, web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -16,6 +16,8 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
+    let mut connection = connection()?;
+
     let transaction = match Transaction::by_id(request.transaction_id)? {
         None => {
             return Ok(
@@ -25,7 +27,7 @@ pub async fn handler(
         Some(t) => t,
     };
 
-    if !has_permission(&transaction, &request.token)? {
+    if !has_permission(&transaction, &request.token, &mut connection)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 

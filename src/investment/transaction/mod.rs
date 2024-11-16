@@ -7,25 +7,30 @@ use crate::database::account::AccountKind;
 use crate::database::asset::AssetId;
 use crate::database::transaction::TxnAction;
 use crate::database::Transaction;
+use crate::error::ServerError;
 use crate::user::authenticate;
-use std::time::SystemTimeError;
+use rusqlite::Connection;
 
 fn has_permission(
     transaction: &Transaction,
     token: &String,
-) -> Result<bool, SystemTimeError> {
+    connection: &mut Connection,
+) -> Result<bool, ServerError> {
     Ok(authenticate(&token)?
         .map(|user_id| {
             transaction
-                .account()
+                .account(connection)
                 .map(|account| account.owner == user_id)
                 .unwrap_or(false)
         })
         .unwrap_or(false))
 }
 
-fn validate_input(transaction: &Transaction) -> Option<&'static str> {
-    if let Some(account) = transaction.account() {
+fn validate_input(
+    transaction: &Transaction,
+    connection: &mut Connection,
+) -> Option<&'static str> {
+    if let Some(account) = transaction.account(connection) {
         match account.kind {
             AccountKind::TFSA | AccountKind::RRSP | AccountKind::FHSA if rule_dep_wdl_cad(transaction) => {
                 Some("Canadian registered account can only deposit or withdrawal Canadian dollar")

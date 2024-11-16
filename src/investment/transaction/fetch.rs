@@ -1,4 +1,4 @@
-use crate::database::{Account, Transaction};
+use crate::database::{connection, Account, Transaction};
 use crate::error::ServerError;
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -15,7 +15,9 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let account = match Account::by_id(request.account)? {
+    let mut connection = connection()?;
+
+    let account = match Account::by_id(request.account, &mut connection)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
