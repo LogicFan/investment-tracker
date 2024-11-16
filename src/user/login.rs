@@ -1,5 +1,5 @@
 use super::PRIVATE_KEY;
-use crate::database::{connection, User};
+use crate::database::{get_connection, User};
 use crate::error::ServerError;
 use crate::user::Claims;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -24,7 +24,7 @@ struct ResponseData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = connection()?;
+    let mut connection = get_connection()?;
 
     let user =
         match User::by_username(request.username.clone(), &mut connection)? {

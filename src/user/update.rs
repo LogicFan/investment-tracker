@@ -1,4 +1,4 @@
-use crate::database::{connection, User};
+use crate::database::{get_connection, User};
 use crate::error::ServerError;
 use crate::user::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -16,7 +16,7 @@ struct RequestData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = connection()?;
+    let mut connection = get_connection()?;
 
     // permission check
     let id = match authenticate(&request.token)? {

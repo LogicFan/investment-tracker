@@ -1,4 +1,4 @@
-use crate::database::{connection, Account};
+use crate::database::{get_connection, Account};
 use crate::error::ServerError;
 use crate::investment::account::{authenticate, validate};
 use actix_web::{post, web, HttpResponse, Responder};
@@ -14,7 +14,7 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = connection()?;
+    let mut connection = get_connection()?;
 
     if !authenticate(&request.account, &request.token, &mut connection)? {
         return Ok(HttpResponse::Forbidden().finish());

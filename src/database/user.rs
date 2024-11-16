@@ -266,19 +266,19 @@ mod tests {
         u0.id = u0.insert(&mut connection).expect("panic");
         assert_ne!(Uuid::nil(), u0.id);
 
-        let u1 = User::by_username(username, &mut connection)
+        let res = User::by_username(username, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(u0.id, u1.id);
-        assert_eq!(u0.username, u1.username);
-        assert_eq!(u0.password, u1.password);
+        assert_eq!(u0.id, res.id);
+        assert_eq!(u0.username, res.username);
+        assert_eq!(u0.password, res.password);
 
-        let u2 = User::by_id(u0.id, &mut connection)
+        let res = User::by_id(u0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(u0.id, u2.id);
-        assert_eq!(u0.username, u2.username);
-        assert_eq!(u0.password, u2.password);
+        assert_eq!(u0.id, res.id);
+        assert_eq!(u0.username, res.username);
+        assert_eq!(u0.password, res.password);
     }
 
     #[test]
@@ -308,17 +308,17 @@ mod tests {
 
         u0.username = String::from("test_user_1");
         u0.update(&mut connection).expect("panic");
-        let u1 = User::by_id(u0.id, &mut connection)
+        let res = User::by_id(u0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(u0.username, u1.username);
+        assert_eq!(u0.username, res.username);
 
         u0.password = Sha256::digest("some_random_password").to_vec();
         u0.update(&mut connection).expect("panic");
-        let u1 = User::by_id(u0.id, &mut connection)
+        let res = User::by_id(u0.id, &mut connection)
             .expect("panic")
             .expect("panic");
-        assert_eq!(u0.password, u1.password);
+        assert_eq!(u0.password, res.password);
     }
 
     #[test]
@@ -379,20 +379,20 @@ mod tests {
         assert_eq!(0, a);
 
         u0.add_attempt(&mut connection).expect("panic");
-        let a = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(1, a);
+        let res = u0.attempts(&mut connection).expect("panic");
+        assert_eq!(1, res);
 
         u0.add_attempt(&mut connection).expect("panic");
-        let a = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(2, a);
+        let res = u0.attempts(&mut connection).expect("panic");
+        assert_eq!(2, res);
 
         u0.add_attempt(&mut connection).expect("panic");
-        let a = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(3, a);
+        let res = u0.attempts(&mut connection).expect("panic");
+        assert_eq!(3, res);
 
         thread::sleep(Duration::from_secs(70));
 
-        let a = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(0, a);
+        let res = u0.attempts(&mut connection).expect("panic");
+        assert_eq!(0, res);
     }
 }

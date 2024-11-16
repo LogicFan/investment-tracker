@@ -1,4 +1,4 @@
-use crate::database::{connection, Account};
+use crate::database::{get_connection, Account};
 use crate::error::ServerError;
 use crate::investment::account::authenticate;
 use actix_web::{post, web, HttpResponse, Responder};
@@ -16,7 +16,7 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = connection()?;
+    let mut connection = get_connection()?;
 
     let account = match Account::by_id(request.account_id, &mut connection)? {
         None => {
