@@ -30,6 +30,6 @@ pub async fn handler(
         _ => return Ok(HttpResponse::Forbidden().finish()),
     };
 
-    let transactions = Transaction::by_account(request.account)?;
+    let transactions = Transaction::by_account(request.account, &mut connection)?;
     Ok(HttpResponse::Ok().json(transactions))
 }

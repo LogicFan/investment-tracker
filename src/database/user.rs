@@ -324,8 +324,8 @@ mod tests {
     #[test]
     fn test_delete() {
         use database::account::{Account, AccountKind};
-        // use database::asset::AssetId;
-        // use database::transaction::{Transaction, TxnAction};
+        use database::asset::AssetId;
+        use database::transaction::{Transaction, TxnAction};
 
         let mut connection =
             Connection::open_in_memory().expect("fail to create database");
@@ -340,20 +340,23 @@ mod tests {
             Account::new("test_account", "alias", u0.id, AccountKind::NRA);
         a0.id = a0.insert(&mut connection).expect("panic");
 
-        // let mut t0 = Transaction::new(
-        //     a0.id,
-        //     NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-        //     TxnAction::Deposit {
-        //         value: (dec!(100.0), AssetId::currency("CAD")),
-        //         fee: (dec!(0.0), AssetId::currency("CAD")),
-        //     },
-        // );
-        // t0.id = t0.insert().expect("panic");
+        let mut t0 = Transaction::new(
+            a0.id,
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Deposit {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t0.id = t0.insert(&mut connection).expect("panic");
 
         // TODO: test user-attached asset deletion here
 
         User::delete(u0.id, &mut connection).expect("panic");
-        // assert_eq!(None, Transaction::by_id(t0.id).expect("panic"));
+        assert_eq!(
+            None,
+            Transaction::by_id(t0.id, &mut connection).expect("panic")
+        );
         assert_eq!(
             None,
             Account::by_id(a0.id, &mut connection).expect("panic")

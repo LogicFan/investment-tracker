@@ -1,6 +1,5 @@
 mod action;
 
-use super::new_connection;
 use crate::error::ServerError;
 pub use action::TxnAction;
 use chrono::NaiveDate;
@@ -63,7 +62,10 @@ impl Transaction {
 }
 
 impl Transaction {
-    pub fn by_id(id: Uuid) -> Result<Option<Transaction>, ServerError> {
+    pub fn by_id(
+        id: Uuid,
+        connection: &mut Connection,
+    ) -> Result<Option<Transaction>, ServerError> {
         let (query, values) = Query::select()
             .columns([
                 TransactionIden::Id,
@@ -75,7 +77,6 @@ impl Transaction {
             .and_where(Expr::col(TransactionIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         let mut statement = connection.prepare(&query)?;
         let record: Option<Result<_, rusqlite::Error>> = statement
             .query_and_then(&*values.as_params(), |row| {
@@ -86,7 +87,10 @@ impl Transaction {
         Ok(record.transpose()?)
     }
 
-    pub fn by_account(account: Uuid) -> Result<Vec<Transaction>, ServerError> {
+    pub fn by_account(
+        account: Uuid,
+        connection: &mut Connection,
+    ) -> Result<Vec<Transaction>, ServerError> {
         let (query, values) = Query::select()
             .columns([
                 TransactionIden::Id,
@@ -98,7 +102,6 @@ impl Transaction {
             .and_where(Expr::col(TransactionIden::Account).eq(account))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         let mut statement = connection.prepare(&query)?;
         let record: Result<Vec<_>, rusqlite::Error> = statement
             .query_and_then(&*values.as_params(), |row| {
@@ -109,7 +112,23 @@ impl Transaction {
         Ok(record?)
     }
 
-    pub fn insert(&self) -> Result<Uuid, ServerError> {
+    pub fn delete(
+        id: Uuid,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
+        let (query, values) = Query::delete()
+            .from_table(TransactionIden::Table)
+            .and_where(Expr::col(TransactionIden::Id).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        connection.execute(&query, &*values.as_params())?;
+        Ok(())
+    }
+
+    pub fn insert(
+        &self,
+        connection: &mut Connection,
+    ) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
         let id = Uuid::new_v4();
@@ -129,12 +148,14 @@ impl Transaction {
             ])?
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
         connection.execute(&query, &*values.as_params())?;
         Ok(id)
     }
 
-    pub fn update(&self) -> Result<(), ServerError> {
+    pub fn update(
+        &self,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(TransactionIden::Table)
             .values([
@@ -145,18 +166,6 @@ impl Transaction {
             .and_where(Expr::col(TransactionIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let connection = new_connection()?;
-        connection.execute(&query, &*values.as_params())?;
-        Ok(())
-    }
-
-    pub fn delete(id: Uuid) -> Result<(), ServerError> {
-        let (query, values) = Query::delete()
-            .from_table(TransactionIden::Table)
-            .and_where(Expr::col(TransactionIden::Id).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let connection = new_connection()?;
         connection.execute(&query, &*values.as_params())?;
         Ok(())
     }

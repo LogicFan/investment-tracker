@@ -1,14 +1,12 @@
 mod kind;
 
 use crate::error::ServerError;
-use crate::user::authenticate;
 use core::str;
 pub use kind::AccountKind;
 use rusqlite::{Connection, Row};
 use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
-use std::time::SystemTimeError;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -192,6 +190,8 @@ impl Account {
 mod tests {
     use super::*;
     use crate::database::{self, User};
+    use chrono::NaiveDate;
+    use rust_decimal_macros::dec;
     use sha2::{Digest, Sha256};
 
     #[test]
@@ -287,7 +287,8 @@ mod tests {
 
     #[test]
     fn test_delete() {
-        // TODO: test account attached transaction
+        use database::asset::AssetId;
+        use database::transaction::{Transaction, TxnAction};
 
         let mut connection =
             Connection::open_in_memory().expect("fail to create database");
@@ -300,13 +301,28 @@ mod tests {
         );
         u0.id = u0.insert(&mut connection).expect("panic");
 
-        let mut a1 =
+        let mut a0 =
             Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-        a1.id = a1.insert(&mut connection).expect("panic");
-        Account::delete(a1.id, &mut connection).expect("panic");
+        a0.id = a0.insert(&mut connection).expect("panic");
+
+        let mut t0 = Transaction::new(
+            a0.id,
+            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            TxnAction::Deposit {
+                value: (dec!(100.0), AssetId::currency("CAD")),
+                fee: (dec!(0.0), AssetId::currency("CAD")),
+            },
+        );
+        t0.id = t0.insert(&mut connection).expect("panic");
+
+        Account::delete(a0.id, &mut connection).expect("panic");
         assert_eq!(
             None,
-            Account::by_id(a1.id, &mut connection).expect("panic")
+            Transaction::by_id(t0.id, &mut connection).expect("panic")
+        );
+        assert_eq!(
+            None,
+            Account::by_id(a0.id, &mut connection).expect("panic")
         );
     }
 }

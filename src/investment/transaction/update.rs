@@ -16,14 +16,14 @@ pub async fn handler(
 ) -> Result<impl Responder, ServerError> {
     let mut connection = connection()?;
 
-    let transaction = match Transaction::by_id(request.transaction.id)? {
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().body("transaction does not exist")
-            )
-        }
-        Some(t) => t,
-    };
+    let transaction =
+        match Transaction::by_id(request.transaction.id, &mut connection)? {
+            None => {
+                return Ok(HttpResponse::BadRequest()
+                    .body("transaction does not exist"))
+            }
+            Some(t) => t,
+        };
 
     // permission check
     if !has_permission(&transaction, &request.token, &mut connection)? {
@@ -41,6 +41,6 @@ pub async fn handler(
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.transaction.update()?;
+    request.transaction.update(&mut connection)?;
     Ok(HttpResponse::Ok().finish())
 }

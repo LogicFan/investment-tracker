@@ -18,19 +18,19 @@ pub async fn handler(
 ) -> Result<impl Responder, ServerError> {
     let mut connection = connection()?;
 
-    let transaction = match Transaction::by_id(request.transaction_id)? {
-        None => {
-            return Ok(
-                HttpResponse::BadRequest().body("transaction does not exist")
-            )
-        }
-        Some(t) => t,
-    };
+    let transaction =
+        match Transaction::by_id(request.transaction_id, &mut connection)? {
+            None => {
+                return Ok(HttpResponse::BadRequest()
+                    .body("transaction does not exist"))
+            }
+            Some(t) => t,
+        };
 
     if !has_permission(&transaction, &request.token, &mut connection)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    Transaction::delete(transaction.id)?;
+    Transaction::delete(transaction.id, &mut connection)?;
     Ok(HttpResponse::Ok().finish())
 }

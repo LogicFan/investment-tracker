@@ -37,10 +37,12 @@ pub async fn handler(
         return Ok(
             HttpResponse::BadRequest().body("transaction id should be nil")
         );
-    } else if let Some(err) = validate_input(&request.transaction, &mut connection) {
+    } else if let Some(err) =
+        validate_input(&request.transaction, &mut connection)
+    {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.transaction.insert()?;
+    request.transaction.insert(&mut connection)?;
     Ok(HttpResponse::Ok().finish())
 }
