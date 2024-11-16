@@ -3,7 +3,7 @@ use crate::error::ServerError;
 use log::info;
 use rusqlite::Connection;
 
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 pub fn run_migration() -> Result<(), ServerError> {
     let mut connection = Connection::open(DATABASE)?;
@@ -34,6 +34,7 @@ pub fn run_migration() -> Result<(), ServerError> {
     }
 
     migrate!(1, "001_create_tables.sql");
+    migrate!(2, "002_create_tables.sql");
 
     if version != VERSION {
         transaction.rollback()?;
