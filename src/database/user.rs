@@ -183,6 +183,11 @@ impl User {
         Ok(())
     }
 
+    #[cfg(not(test))]
+    const ATTEMPT_TIMEOUT: &'static str = "-1 minutes";
+    #[cfg(test)]
+    const ATTEMPT_TIMEOUT: &'static str = "-1 seconds";
+
     pub fn attempts(
         &self,
         transaction: &rusqlite::Transaction,
@@ -191,8 +196,10 @@ impl User {
             .expr_as(
                 // if login_at is null, this condition will also fail
                 Expr::case(
-                    Expr::col(UserIden::LoginAt)
-                        .gt(Expr::cust("DATETIME('NOW', '-1 minutes')")),
+                    Expr::col(UserIden::LoginAt).gt(Expr::cust(format!(
+                        "DATETIME('NOW', '{}')",
+                        Self::ATTEMPT_TIMEOUT
+                    ))),
                     Expr::col(UserIden::Attempts),
                 )
                 .finally(0),
@@ -225,8 +232,10 @@ impl User {
                     UserIden::Attempts,
                     // if login_at is null, this condition will also fail
                     Expr::case(
-                        Expr::col(UserIden::LoginAt)
-                            .gt(Expr::cust("DATETIME('NOW', '-1 minutes')")),
+                        Expr::col(UserIden::LoginAt).gt(Expr::cust(format!(
+                            "DATETIME('NOW', '{}')",
+                            Self::ATTEMPT_TIMEOUT
+                        ))),
                         Expr::col(UserIden::Attempts).add(1),
                     )
                     .finally(1)
@@ -459,7 +468,7 @@ mod tests {
         }
 
         {
-            thread::sleep(Duration::from_secs(70));
+            thread::sleep(Duration::from_secs(2));
             let tran = conn.transaction()?;
             let res = u0.attempts(&tran)?;
             assert_eq!(0, res);
