@@ -1,6 +1,6 @@
 use crate::error::ServerError;
 use core::str;
-use rusqlite::Row;
+use rusqlite::{Row, Transaction as SqlTransaction};
 use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
@@ -60,7 +60,7 @@ impl User {
 impl User {
     pub fn by_id(
         id: Uuid,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -74,7 +74,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = transaction.prepare(&query)?;
+        let mut statement = sql_transaction.prepare(&query)?;
         let record = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
@@ -84,7 +84,7 @@ impl User {
 
     pub fn by_username(
         username: impl Into<String>,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -98,7 +98,7 @@ impl User {
             .and_where(Expr::col(UserIden::Username).eq(username.into()))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = transaction.prepare(&query)?;
+        let mut statement = sql_transaction.prepare(&query)?;
         let record = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
@@ -108,7 +108,7 @@ impl User {
 
     pub fn delete(
         id: Uuid,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         {
             use super::account::{Account, AccountIden};
@@ -117,11 +117,11 @@ impl User {
                 .from(AccountIden::Table)
                 .and_where(Expr::col(AccountIden::Owner).eq(id))
                 .build_rusqlite(SqliteQueryBuilder);
-            let mut statement = transaction.prepare(&query)?;
+            let mut statement = sql_transaction.prepare(&query)?;
             statement
                 .query_and_then(&*values.as_params(), |row| row.get(0))?
                 .try_for_each(|x: Result<Uuid, _>| {
-                    Account::delete(x?, &transaction)
+                    Account::delete(x?, &sql_transaction)
                 })?;
         }
 
@@ -131,13 +131,13 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        transaction.execute(&query, &*values.as_params())?;
+        sql_transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
     pub fn insert(
         &self,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
@@ -152,13 +152,13 @@ impl User {
             ])?
             .build_rusqlite(SqliteQueryBuilder);
 
-        transaction.execute(&query, &*values.as_params())?;
+        sql_transaction.execute(&query, &*values.as_params())?;
         Ok(id)
     }
 
     pub fn update(
         &self,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(UserIden::Table)
@@ -169,7 +169,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        transaction.execute(&query, &*values.as_params())?;
+        sql_transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
@@ -180,7 +180,7 @@ impl User {
 
     pub fn attempts(
         &self,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<u64, ServerError> {
         let (query, values) = Query::select()
             .expr_as(
@@ -199,7 +199,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = transaction.prepare(&query)?;
+        let mut statement = sql_transaction.prepare(&query)?;
         let record: Result<u64, rusqlite::Error> = statement
             .query_and_then(&*values.as_params(), |row| {
                 row.get(UserIden::Attempts.as_str())
@@ -212,7 +212,7 @@ impl User {
 
     pub fn add_attempt(
         &self,
-        transaction: &rusqlite::Transaction,
+        sql_transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(UserIden::Table)
@@ -235,7 +235,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        transaction.execute(&query, &*values.as_params())?;
+        sql_transaction.execute(&query, &*values.as_params())?;
 
         Ok(())
     }
@@ -375,7 +375,6 @@ mod tests {
             let mut a0 =
                 Account::new("test_account", "alias", u0.id, AccountKind::NRA);
             a0.id = a0.insert(&tran)?;
-            tran.commit()?; // TODO: move to the end once all other part support transaction level operation.
             let mut t0 = Transaction::new(
                 a0.id,
                 NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
@@ -384,7 +383,8 @@ mod tests {
                     fee: (dec!(0.0), AssetId::currency("CAD")),
                 },
             );
-            t0.id = t0.insert(&mut conn)?;
+            t0.id = t0.insert(&tran)?;
+            tran.commit()?;
             // TODO: test user-attached asset deletion here
             (u0, a0, t0)
         };
@@ -394,12 +394,9 @@ mod tests {
             tran.commit()?;
 
             let tran = conn.transaction()?;
-            // assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
+            assert_eq!(None, Transaction::by_id(t0.id, &tran)?);
             assert_eq!(None, Account::by_id(a0.id, &tran)?);
             assert_eq!(None, User::by_id(u0.id, &tran)?);
-            tran.rollback()?; // TODO: remove
-
-            assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
         }
 
         Ok(())
