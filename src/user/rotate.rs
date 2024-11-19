@@ -1,7 +1,7 @@
 use super::PRIVATE_KEY;
 use crate::database::{get_connection, User};
 use crate::error::ServerError;
-use crate::user::{authenticate, Claims};
+use crate::user::{AsUser, Claims};
 use actix_web::{post, web, HttpResponse, Responder};
 use jwt::SignWithKey;
 use serde::{Deserialize, Serialize};
@@ -25,22 +25,24 @@ pub async fn handler(
     let mut conn = get_connection()?;
     let tran = conn.transaction()?;
 
-    let id = match authenticate(&request.token)? {
+    let id = match request.token.user_id()? {
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
+    let token = {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let claims = Claims {
+            iss: id,
+            iat: now,
+            exp: now + 3600,
+        };
+        claims.sign_with_key(&*PRIVATE_KEY)?
+    };
+
     let user = match User::by_id(id, &tran)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
-
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let claims = Claims {
-        iss: id,
-        iat: now,
-        exp: now + 3600,
-    };
-    let token = claims.sign_with_key(&*PRIVATE_KEY)?;
 
     let response = ResponseData {
         username: user.username,

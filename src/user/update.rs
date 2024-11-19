@@ -40,6 +40,7 @@ pub async fn handler(
         }
         user.password = Sha256::digest(new_password).to_vec()
     }
+    // TODO: add input check here
 
     user.update(&tran)?;
     tran.commit()?;
