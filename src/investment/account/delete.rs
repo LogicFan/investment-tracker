@@ -16,19 +16,21 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
-    let account = match Account::by_id(request.account_id, &mut connection)? {
+    let account = match Account::by_id(request.account_id, &tran)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
         Some(a) => a,
     };
 
-    if !authenticate(&account, &request.token, &mut connection)? {
+    if !authenticate(&account, &request.token, &tran)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    Account::delete(account.id, &mut connection)?;
+    Account::delete(account.id, &tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }

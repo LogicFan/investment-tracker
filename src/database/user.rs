@@ -75,7 +75,7 @@ impl User {
             .build_rusqlite(SqliteQueryBuilder);
 
         let mut statement = transaction.prepare(&query)?;
-        let record: Option<Result<_, rusqlite::Error>> = statement
+        let record = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
 
@@ -99,7 +99,7 @@ impl User {
             .build_rusqlite(SqliteQueryBuilder);
 
         let mut statement = transaction.prepare(&query)?;
-        let record: Option<Result<_, rusqlite::Error>> = statement
+        let record = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
 
@@ -110,38 +110,28 @@ impl User {
         id: Uuid,
         transaction: &rusqlite::Transaction,
     ) -> Result<(), ServerError> {
-        use super::account::AccountIden;
-        use super::transaction::TransactionIden;
-
-        // delete associated transactions
-        let (query1, values1) = Query::delete()
-            .from_table(TransactionIden::Table)
-            .and_where(
-                Expr::col(TransactionIden::Account).in_subquery(
-                    Query::select()
-                        .columns([AccountIden::Id])
-                        .from(AccountIden::Table)
-                        .and_where(Expr::col(AccountIden::Owner).eq(id))
-                        .take(),
-                ),
-            )
-            .build_rusqlite(SqliteQueryBuilder);
-
-        // delete associated accounts
-        let (query2, values2) = Query::delete()
-            .from_table(AccountIden::Table)
-            .and_where(Expr::col(AccountIden::Owner).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
+        {
+            use super::account::{Account, AccountIden};
+            let (query, values) = Query::select()
+                .columns([AccountIden::Id])
+                .from(AccountIden::Table)
+                .and_where(Expr::col(AccountIden::Owner).eq(id))
+                .build_rusqlite(SqliteQueryBuilder);
+            let mut statement = transaction.prepare(&query)?;
+            statement
+                .query_and_then(&*values.as_params(), |row| row.get(0))?
+                .try_for_each(|x: Result<Uuid, _>| {
+                    Account::delete(x?, &transaction)
+                })?;
+        }
 
         // delete user
-        let (query3, values3) = Query::delete()
+        let (query, values) = Query::delete()
             .from_table(UserIden::Table)
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        transaction.execute(&query1, &*values1.as_params())?;
-        transaction.execute(&query2, &*values2.as_params())?;
-        transaction.execute(&query3, &*values3.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
@@ -382,11 +372,10 @@ mod tests {
             let mut u0 =
                 User::new("test_user", Sha256::digest("password").to_vec());
             u0.id = u0.insert(&tran)?;
-            tran.commit()?; // TODO: move to the end once all other part support transaction level operation.
             let mut a0 =
                 Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-            a0.id = a0.insert(&mut conn)?;
-
+            a0.id = a0.insert(&tran)?;
+            tran.commit()?; // TODO: move to the end once all other part support transaction level operation.
             let mut t0 = Transaction::new(
                 a0.id,
                 NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
@@ -406,12 +395,11 @@ mod tests {
 
             let tran = conn.transaction()?;
             // assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
-            // assert_eq!(None, Account::by_id(a0.id, &mut conn)?);
+            assert_eq!(None, Account::by_id(a0.id, &tran)?);
             assert_eq!(None, User::by_id(u0.id, &tran)?);
             tran.rollback()?; // TODO: remove
 
             assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
-            assert_eq!(None, Account::by_id(a0.id, &mut conn)?);
         }
 
         Ok(())

@@ -54,9 +54,13 @@ impl Transaction {
         &self,
         connection: &mut Connection,
     ) -> Option<super::Account> {
-        match super::Account::by_id(self.account, connection) {
-            Ok(Some(account)) => Some(account),
-            _ => None,
+        if let Some(tran) = connection.transaction().ok() {
+            match super::Account::by_id(self.account, &tran) {
+                Ok(Some(account)) => Some(account),
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 }

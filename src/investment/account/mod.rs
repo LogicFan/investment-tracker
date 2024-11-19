@@ -1,6 +1,5 @@
 use crate::database::Account;
 use crate::user;
-use rusqlite::Connection;
 use std::time::SystemTimeError;
 
 pub mod delete;
@@ -11,7 +10,7 @@ pub mod update;
 pub fn authenticate(
     account: &Account,
     token: &String,
-    _: &mut Connection,
+    _: &rusqlite::Transaction,
 ) -> Result<bool, SystemTimeError> {
     Ok(user::authenticate(&token)?
         .map(|user_id| account.owner == user_id)
@@ -20,7 +19,7 @@ pub fn authenticate(
 
 pub fn validate(
     account: &Account,
-    _: &mut Connection,
+    _: &rusqlite::Transaction,
 ) -> Option<&'static str> {
     if account.name.len() < 4 {
         Some("account name too short")

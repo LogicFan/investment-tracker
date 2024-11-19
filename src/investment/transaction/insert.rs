@@ -15,17 +15,16 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
-    let account =
-        match Account::by_id(request.transaction.account, &mut connection)? {
-            None => {
-                return Ok(
-                    HttpResponse::BadRequest().body("account does not exist")
-                )
-            }
-            Some(a) => a,
-        };
+    let account = match Account::by_id(request.transaction.account, &tran)? {
+        None => {
+            return Ok(HttpResponse::BadRequest().body("account does not exist"))
+        }
+        Some(a) => a,
+    };
+    tran.commit()?;
 
     // permission check
     match authenticate(&request.token)? {
@@ -37,12 +36,10 @@ pub async fn handler(
         return Ok(
             HttpResponse::BadRequest().body("transaction id should be nil")
         );
-    } else if let Some(err) =
-        validate_input(&request.transaction, &mut connection)
-    {
+    } else if let Some(err) = validate_input(&request.transaction, &mut conn) {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.transaction.insert(&mut connection)?;
+    request.transaction.insert(&mut conn)?;
     Ok(HttpResponse::Ok().finish())
 }

@@ -34,7 +34,7 @@ const props = defineProps<{ account: Account }>()
                     Performance
                 </VaCardTitle>
             </VaCard>
-            <Transactions :accounts="[props.account.id]" />
+            <Transactions :account="account" />
         </div>
         <div class="w-64 flex-grow-0 flex-shrink-0 flex flex-col gap-4">
             <VaCard class="flex-grow-0 h-72 w-full">

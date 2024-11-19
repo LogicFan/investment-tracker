@@ -2,7 +2,9 @@
 import { Transaction } from '@/composables/transaction';
 import axios from 'axios';
 import { ref } from 'vue';
-const props = defineProps<{ accounts: string[] }>()
+import NewTransaction from './transactions/NewTransaction.vue';
+import { Account } from '@/composables/account';
+const props = defineProps<{ account: Account }>()
 
 const transactions = ref<Transaction[]>([]);
 const columns = [
@@ -15,7 +17,7 @@ const columns = [
 function fetch() {
     axios.post('/api/investment/transaction/fetch', {
         token: localStorage.getItem('token'),
-        accounts: props.accounts
+        account: props.account.id
     }).then(response => {
         transactions.value = response.data;
     })
@@ -33,7 +35,11 @@ fetch();
             <VaCardContent>
                 <VaDataTable :items="transactions" :columns="columns">
                     <template #header(edit)="">
-                        <VaButton icon="ms-add" size="small" />
+                        <NewTransaction :account="account" />
+                    </template>
+                    <template #cell(edit)="">
+                        <VaButton icon="ms-edit" size="small" />
+                        <VaButton icon="ms-delete" size="small" />
                     </template>
                 </VaDataTable>
             </VaCardContent>

@@ -14,26 +14,27 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
-    let account = match Account::by_id(request.account.id, &mut connection)? {
+    let account = match Account::by_id(request.account.id, &tran)? {
         None => {
             return Ok(HttpResponse::BadRequest().body("account does not exist"))
         }
         Some(a) => a,
     };
 
-    if !authenticate(&account, &request.token, &mut connection)? {
+    if !authenticate(&account, &request.token, &tran)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
     if request.account.owner != account.owner {
         return Ok(HttpResponse::BadRequest().body("owner cannot be modified"));
-    } else if let Some(err) = validate(&request.account, &mut connection)
-    {
+    } else if let Some(err) = validate(&request.account, &tran) {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.account.update(&mut connection)?;
+    request.account.update(&tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }

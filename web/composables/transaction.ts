@@ -1,24 +1,34 @@
-export interface Transaction {
+export type Transaction = {
     id: string,
     account: string,
     date: string,
     action: TxnAction,
 };
 
-type TxnAction = TxnActionDep | TxnActionBuy
+export type TxnAction = TxnActionDep | TxnActionBuy
 
-export interface TxnActionDep {
-    type: "Deposit" | "Withdrawal" | "Interest"
+export type TxnActionDep = {
+    type: TxnActionDepType,
     value: [number, string],
     fee: [number, string],
 }
+export type TxnActionDepType = "Deposit" | "Withdrawal"
 
-export interface TxnActionBuy {
-    type: "Buy" | "Sell"
+export type TxnActionBuy = {
+    type: TxnActionBuyType
     asset: [number, string],
     cash: [number, string],
     fee: [number, string],
 }
+
+export type TxnActionBuyType = "Buy" | "Sell"
+
+export const actionOptions = [
+    'Deposit',
+    'Withdrawal',
+    'Buy',
+    'Sell',
+]
 
 // export function to_content(value: TxnAction): string {
 //     if (value.type == "Deposit") {

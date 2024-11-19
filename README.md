@@ -2,20 +2,10 @@
 
 ## TODO
 
-- [ ] complete the overall design of Details page, with back, edit account,
-delete account, and info displays
-- [ ] can insert transactions
-- [ ] can export & import transactions of an account
-
-### Transactions
-
-- [ ] Deposit / Withdrawal
-- [ ] Buy / Sell
-- [ ] Interest / Dividend
-- [ ] Fee / Reimbursement
-- [ ] ForEx
-- [ ] Journal
-- [ ] Split
+- Create database to store cached data of asset.
+- Create currency search end point.
+- Create asset search end point
+- Create UI to insert transactions
 
 ## Recommended IDE Setup
 

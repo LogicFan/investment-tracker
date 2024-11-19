@@ -13,13 +13,14 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     let user_id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i
     };
 
-    let accounts = Account::by_owner(user_id, &mut connection)?;
+    let accounts = Account::by_owner(user_id, &tran)?;
     Ok(HttpResponse::Ok().json(accounts))
 }
