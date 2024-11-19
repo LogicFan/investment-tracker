@@ -104,3 +104,23 @@ impl FromSql for AssetId {
         Err(FromSqlError::InvalidType)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::ServerError;
+
+    #[test]
+    fn test_serde() -> Result<(), ServerError> {
+        fn assert_self(asset_id: AssetId) {
+            assert_eq!(asset_id.clone(), AssetId::from(String::from(asset_id)));
+        }
+
+        assert_self(AssetId::currency("USD"));
+        assert_self(AssetId::crypto("BTC"));
+        assert_self(AssetId::stock("TSE", "DLR"));
+        assert_self(AssetId::unknown("TDB627"));
+
+        Ok(())
+    }
+}
