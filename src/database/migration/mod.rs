@@ -1,12 +1,9 @@
 use crate::error::ServerError;
 use log::info;
-use rusqlite::Connection;
 
 const VERSION: u32 = 2;
 
-pub fn run_migration(connection: &mut Connection) -> Result<(), ServerError> {
-    let transaction = connection.transaction()?;
-
+pub fn run_migration(transaction: &rusqlite::Transaction) -> Result<(), ServerError> {
     let mut version =
         transaction.query_row("PRAGMA user_version;", (), |row| {
             row.get::<_, u32>(0)
@@ -35,7 +32,6 @@ pub fn run_migration(connection: &mut Connection) -> Result<(), ServerError> {
     migrate!(2, "002_create_tables.sql");
 
     if version != VERSION {
-        transaction.rollback()?;
         Err(ServerError::Internal(format!(
             "fail to migrate database from version {} to version {}",
             version, VERSION
@@ -46,7 +42,6 @@ pub fn run_migration(connection: &mut Connection) -> Result<(), ServerError> {
             format!("PRAGMA user_version = {};", version).as_str(),
             (),
         )?;
-        transaction.commit()?;
         Ok(())
     }
 }

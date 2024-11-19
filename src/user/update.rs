@@ -16,14 +16,15 @@ struct RequestData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     // permission check
     let id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
         Some(i) => i,
     };
-    let mut user = match User::by_id(id, &mut connection)? {
+    let mut user = match User::by_id(id, &tran)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
@@ -40,6 +41,7 @@ pub async fn handler(
         user.password = Sha256::digest(new_password).to_vec()
     }
 
-    user.update(&mut connection)?;
+    user.update(&tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }

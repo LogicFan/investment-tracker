@@ -35,6 +35,8 @@ impl FromSql for AccountKind {
             }
         }
 
-        Err(FromSqlError::InvalidType)
+        Err(FromSqlError::Other(
+            String::from("Cannot convert to AccountKind").into(),
+        ))
     }
 }

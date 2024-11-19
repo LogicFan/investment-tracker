@@ -17,7 +17,8 @@ struct RequestData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     let id = match authenticate(&request.token)? {
         None => return Ok(HttpResponse::Forbidden().finish()),
@@ -26,7 +27,7 @@ pub async fn handler(
     if id != request.id {
         return Ok(HttpResponse::Forbidden().finish());
     }
-    let user = match User::by_id(request.id, &mut connection)? {
+    let user = match User::by_id(request.id, &tran)? {
         None => return Ok(HttpResponse::BadRequest().finish()),
         Some(u) => u,
     };
@@ -34,6 +35,7 @@ pub async fn handler(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    User::delete(user.id, &mut connection)?;
+    User::delete(user.id, &tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }

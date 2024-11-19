@@ -1,6 +1,6 @@
 use crate::error::ServerError;
 use core::str;
-use rusqlite::{Connection, Row};
+use rusqlite::Row;
 use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
@@ -60,7 +60,7 @@ impl User {
 impl User {
     pub fn by_id(
         id: Uuid,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -74,7 +74,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = connection.prepare(&query)?;
+        let mut statement = transaction.prepare(&query)?;
         let record: Option<Result<_, rusqlite::Error>> = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
@@ -84,7 +84,7 @@ impl User {
 
     pub fn by_username(
         username: impl Into<String>,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -98,7 +98,7 @@ impl User {
             .and_where(Expr::col(UserIden::Username).eq(username.into()))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = connection.prepare(&query)?;
+        let mut statement = transaction.prepare(&query)?;
         let record: Option<Result<_, rusqlite::Error>> = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
@@ -108,7 +108,7 @@ impl User {
 
     pub fn delete(
         id: Uuid,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<(), ServerError> {
         use super::account::AccountIden;
         use super::transaction::TransactionIden;
@@ -139,17 +139,15 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let transaction = connection.transaction()?;
         transaction.execute(&query1, &*values1.as_params())?;
         transaction.execute(&query2, &*values2.as_params())?;
         transaction.execute(&query3, &*values3.as_params())?;
-        transaction.commit()?;
         Ok(())
     }
 
     pub fn insert(
         &self,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
@@ -164,13 +162,13 @@ impl User {
             ])?
             .build_rusqlite(SqliteQueryBuilder);
 
-        connection.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(id)
     }
 
     pub fn update(
         &self,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(UserIden::Table)
@@ -181,13 +179,13 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        connection.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
     pub fn attempts(
         &self,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<u64, ServerError> {
         let (query, values) = Query::select()
             .expr_as(
@@ -204,7 +202,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = connection.prepare(&query)?;
+        let mut statement = transaction.prepare(&query)?;
         let record: Result<u64, rusqlite::Error> = statement
             .query_and_then(&*values.as_params(), |row| {
                 row.get(UserIden::Attempts.as_str())
@@ -217,7 +215,7 @@ impl User {
 
     pub fn add_attempt(
         &self,
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(UserIden::Table)
@@ -238,7 +236,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        connection.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
 
         Ok(())
     }
@@ -249,150 +247,224 @@ mod tests {
     use super::*;
     use crate::database;
     use chrono::NaiveDate;
+    use rusqlite::Connection;
     use rust_decimal_macros::dec;
     use sha2::{Digest, Sha256};
     use std::thread;
     use std::time::Duration;
 
     #[test]
-    fn test_insert_and_select() {
-        let mut connection =
-            Connection::open_in_memory().expect("fail to create database");
-        database::migration::run_migration(&mut connection)
-            .expect("database initialization fail");
-
+    fn test_insert_and_select() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
         let username = "test_user";
-        let mut u0 = User::new(username, Sha256::digest("password").to_vec());
-        u0.id = u0.insert(&mut connection).expect("panic");
-        assert_ne!(Uuid::nil(), u0.id);
 
-        let res = User::by_username(username, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(u0.id, res.id);
-        assert_eq!(u0.username, res.username);
-        assert_eq!(u0.password, res.password);
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        let u0 = {
+            let tran = conn.transaction()?;
+            let mut u0 =
+                User::new(username, Sha256::digest("password").to_vec());
+            u0.id = u0.insert(&tran)?;
+            assert_ne!(Uuid::nil(), u0.id);
+            tran.commit()?;
+            u0
+        };
+        {
+            let tran = conn.transaction()?;
+            let res = User::by_username(username, &tran)?.expect("no user");
+            assert_eq!(u0.id, res.id);
+            assert_eq!(u0.username, res.username);
+            assert_eq!(u0.password, res.password);
+        }
+        {
+            let tran = conn.transaction()?;
+            let res = User::by_id(u0.id, &tran)?.expect("no user");
+            assert_eq!(u0.id, res.id);
+            assert_eq!(u0.username, res.username);
+            assert_eq!(u0.password, res.password);
+        }
 
-        let res = User::by_id(u0.id, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(u0.id, res.id);
-        assert_eq!(u0.username, res.username);
-        assert_eq!(u0.password, res.password);
+        Ok(())
     }
 
     #[test]
-    fn test_duplicate_insert() {
-        let mut connection =
-            Connection::open_in_memory().expect("fail to create database");
-        database::migration::run_migration(&mut connection)
-            .expect("database initialization fail");
-
+    fn test_duplicate_insert() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
         let username = "test_user";
-        let mut u0 = User::new(username, Sha256::digest("password").to_vec());
-        u0.id = u0.insert(&mut connection).expect("panic");
-        let u1 = User::new(username, Sha256::digest("password").to_vec());
-        u1.insert(&mut connection).expect_err("duplicate insert");
+
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        {
+            let tran = conn.transaction()?;
+            let mut u0 =
+                User::new(username, Sha256::digest("password").to_vec());
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?;
+        }
+        {
+            let tran = conn.transaction()?;
+            let u1 = User::new(username, Sha256::digest("password").to_vec());
+            u1.insert(&tran).expect_err("duplicate insert");
+        }
+
+        Ok(())
     }
 
     #[test]
-    fn test_user_update() {
-        let mut connection =
-            Connection::open_in_memory().expect("fail to create database");
-        database::migration::run_migration(&mut connection)
-            .expect("database initialization fail");
+    fn test_user_update() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-        let mut u0 =
-            User::new("test_user_0", Sha256::digest("password").to_vec());
-        u0.id = u0.insert(&mut connection).expect("panic");
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        let mut u0 = {
+            let tran = conn.transaction()?;
+            let mut u0 =
+                User::new("test_user_0", Sha256::digest("password").to_vec());
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?;
+            u0
+        };
+        {
+            let tran = conn.transaction()?;
+            u0.username = String::from("test_user_1");
+            u0.update(&tran)?;
+            tran.commit()?;
 
-        u0.username = String::from("test_user_1");
-        u0.update(&mut connection).expect("panic");
-        let res = User::by_id(u0.id, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(u0.username, res.username);
+            let tran = conn.transaction()?;
+            let res = User::by_id(u0.id, &tran)?.expect("no user");
+            assert_eq!(u0.username, res.username);
+        }
+        {
+            let tran = conn.transaction()?;
+            u0.password = Sha256::digest("some_random_password").to_vec();
+            u0.update(&tran)?;
+            tran.commit()?;
 
-        u0.password = Sha256::digest("some_random_password").to_vec();
-        u0.update(&mut connection).expect("panic");
-        let res = User::by_id(u0.id, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(u0.password, res.password);
+            let tran = conn.transaction()?;
+            let res = User::by_id(u0.id, &tran)?.expect("no user");
+            assert_eq!(u0.password, res.password);
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_delete() {
+    fn test_delete() -> Result<(), ServerError> {
         use database::account::{Account, AccountKind};
         use database::asset::AssetId;
         use database::transaction::{Transaction, TxnAction};
+        let mut conn = Connection::open_in_memory()?;
 
-        let mut connection =
-            Connection::open_in_memory().expect("fail to create database");
-        database::migration::run_migration(&mut connection)
-            .expect("database initialization fail");
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        let (u0, a0, t0) = {
+            let tran = conn.transaction()?;
+            let mut u0 =
+                User::new("test_user", Sha256::digest("password").to_vec());
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?; // TODO: move to the end once all other part support transaction level operation.
+            let mut a0 =
+                Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+            a0.id = a0.insert(&mut conn)?;
 
-        let mut u0 =
-            User::new("test_user", Sha256::digest("password").to_vec());
-        u0.id = u0.insert(&mut connection).expect("panic");
+            let mut t0 = Transaction::new(
+                a0.id,
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Deposit {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            t0.id = t0.insert(&mut conn)?;
+            // TODO: test user-attached asset deletion here
+            (u0, a0, t0)
+        };
+        {
+            let tran = conn.transaction()?;
+            User::delete(u0.id, &tran)?;
+            tran.commit()?;
 
-        let mut a0 =
-            Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-        a0.id = a0.insert(&mut connection).expect("panic");
+            let tran = conn.transaction()?;
+            // assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
+            // assert_eq!(None, Account::by_id(a0.id, &mut conn)?);
+            assert_eq!(None, User::by_id(u0.id, &tran)?);
+            tran.rollback()?; // TODO: remove
 
-        let mut t0 = Transaction::new(
-            a0.id,
-            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-            TxnAction::Deposit {
-                value: (dec!(100.0), AssetId::currency("CAD")),
-                fee: (dec!(0.0), AssetId::currency("CAD")),
-            },
-        );
-        t0.id = t0.insert(&mut connection).expect("panic");
+            assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
+            assert_eq!(None, Account::by_id(a0.id, &mut conn)?);
+        }
 
-        // TODO: test user-attached asset deletion here
-
-        User::delete(u0.id, &mut connection).expect("panic");
-        assert_eq!(
-            None,
-            Transaction::by_id(t0.id, &mut connection).expect("panic")
-        );
-        assert_eq!(
-            None,
-            Account::by_id(a0.id, &mut connection).expect("panic")
-        );
-        assert_eq!(None, User::by_id(u0.id, &mut connection).expect("panic"));
+        Ok(())
     }
 
     #[test]
-    fn test_attempts() {
-        let mut connection =
-            Connection::open_in_memory().expect("fail to create database");
-        database::migration::run_migration(&mut connection)
-            .expect("database initialization fail");
+    fn test_attempts() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-        let mut u0 =
-            User::new("test_user", Sha256::digest("password").to_vec());
-        u0.id = u0.insert(&mut connection).expect("panic");
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        let u0 = {
+            let tran = conn.transaction()?;
+            let mut u0 =
+                User::new("test_user", Sha256::digest("password").to_vec());
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?;
+            u0
+        };
+        {
+            let tran = conn.transaction()?;
+            let a = u0.attempts(&tran)?;
+            assert_eq!(0, a);
+        }
+        {
+            let tran = conn.transaction()?;
+            u0.add_attempt(&tran)?;
+            tran.commit()?;
 
-        let a = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(0, a);
+            let tran = conn.transaction()?;
+            let res = u0.attempts(&tran)?;
+            assert_eq!(1, res);
+        }
+        {
+            let tran = conn.transaction()?;
+            u0.add_attempt(&tran)?;
+            tran.commit()?;
 
-        u0.add_attempt(&mut connection).expect("panic");
-        let res = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(1, res);
+            let tran = conn.transaction()?;
+            let res = u0.attempts(&tran)?;
+            assert_eq!(2, res);
+        }
+        {
+            let tran = conn.transaction()?;
+            u0.add_attempt(&tran)?;
+            tran.commit()?;
 
-        u0.add_attempt(&mut connection).expect("panic");
-        let res = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(2, res);
+            let tran = conn.transaction()?;
+            let res = u0.attempts(&tran)?;
+            assert_eq!(3, res);
+        }
 
-        u0.add_attempt(&mut connection).expect("panic");
-        let res = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(3, res);
+        {
+            thread::sleep(Duration::from_secs(70));
+            let tran = conn.transaction()?;
+            let res = u0.attempts(&tran)?;
+            assert_eq!(0, res);
+        }
 
-        thread::sleep(Duration::from_secs(70));
-
-        let res = u0.attempts(&mut connection).expect("panic");
-        assert_eq!(0, res);
+        Ok(())
     }
 }

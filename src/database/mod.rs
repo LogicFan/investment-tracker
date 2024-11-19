@@ -14,7 +14,12 @@ pub fn get_connection() -> Result<Connection, rusqlite::Error> {
 
 pub fn init() -> Result<(), ServerError> {
     fs::create_dir_all("data/")?;
-    migration::run_migration(&mut get_connection()?)?;
+
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
+    migration::run_migration(&tran)?;
+    tran.commit()?;
+    
     Ok(())
 }
 
@@ -28,7 +33,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_init() {
-        init().expect("database initialization fail");
+    fn test_init() -> Result<(), ServerError> {
+        let mut connection = Connection::open_in_memory()?;
+        let transaction = connection.transaction()?;
+        migration::run_migration(&transaction)?;
+        transaction.commit()?;
+
+        Ok(())
     }
 }

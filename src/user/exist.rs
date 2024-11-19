@@ -12,9 +12,10 @@ struct RequestData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     let has_user =
-        User::by_username(request.username.clone(), &mut connection)?.is_some();
+        User::by_username(request.username.clone(), &tran)?.is_some();
     Ok(HttpResponse::Ok().json(has_user))
 }

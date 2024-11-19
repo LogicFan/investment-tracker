@@ -24,22 +24,24 @@ struct ResponseData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     let user =
-        match User::by_username(request.username.clone(), &mut connection)? {
+        match User::by_username(request.username.clone(), &tran)? {
             None => {
                 return Ok(HttpResponse::BadRequest().body("unknown username"))
             }
             Some(u) => u,
         };
 
-    if user.attempts(&mut connection)? >= 3 {
+    if user.attempts(&tran)? >= 3 {
         return Ok(HttpResponse::Forbidden().body("try again after 1 minute"));
     }
 
     if Sha256::digest(request.password.clone()).to_vec() != user.password {
-        user.add_attempt(&mut connection)?;
+        user.add_attempt(&tran)?;
+        tran.commit()?;
         return Ok(HttpResponse::Forbidden().body("incorrect password"));
     }
 

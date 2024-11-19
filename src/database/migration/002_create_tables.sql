@@ -11,8 +11,8 @@ CREATE INDEX IF NOT EXISTS `asset_i0` ON `asset` (`owner`);
 CREATE TABLE IF NOT EXISTS `asset_price` (
     `asset` TEXT REFERENCES `asset` (`id`) NOT NULL,
     `date` DATE NOT NULL,
+    `price` BLOB NOT NULL,
     `currency` TEXT NOT NULL,
-    `price` NUMBER NOT NULL,
     PRIMARY KEY (`asset`, `date`, `currency`)
 );
 
@@ -21,8 +21,8 @@ CREATE INDEX IF NOT EXISTS `asset_price_i0` ON `asset_price` (`asset`);
 CREATE TABLE IF NOT EXISTS `asset_dividend` (
     `asset` TEXT REFERENCES `asset` (`id`) NOT NULL,
     `date` DATE NOT NULL,
+    `dividend` BLOB NOT NULL,
     `currency` TEXT NOT NULL,
-    `price` NUMBER NOT NULL,
     PRIMARY KEY (`asset`, `date`)
 );
 
@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS `asset_dividend_i0` ON `asset_dividend` (`asset`);
 CREATE TABLE IF NOT EXISTS `asset_split` (
     `asset` TEXT REFERENCES `asset` (`id`) NOT NULL,
     `date` DATE NOT NULL,
-    `ratio` TEXT NOT NULL,
+    `ratio` BLOB NOT NULL,
     PRIMARY KEY (`asset`, `date`)
 );
 

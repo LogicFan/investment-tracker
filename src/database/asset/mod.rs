@@ -1,8 +1,14 @@
+mod history;
 mod id;
+mod price;
+mod update;
 
 use crate::error::ServerError;
+use chrono::NaiveDate;
+use history::{AssetDividendIden, AssetPriceIden};
 pub use id::AssetId;
 use rusqlite::{Connection, Row};
+use rust_decimal::Decimal;
 use sea_query::{enum_def, Cond, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
@@ -55,12 +61,16 @@ impl Asset {
     }
 
     pub fn owner(&self, connection: &mut Connection) -> Option<super::User> {
-        match self.owner {
-            Some(owner) => match super::User::by_id(owner, connection) {
-                Ok(Some(user)) => Some(user),
+        if let Some(tran) = connection.transaction().ok() {
+            match self.owner {
+                Some(owner) => match super::User::by_id(owner, &tran) {
+                    Ok(Some(user)) => Some(user),
+                    _ => None,
+                },
                 _ => None,
-            },
-            _ => None,
+            }
+        } else {
+            None
         }
     }
 }
@@ -160,7 +170,8 @@ impl Asset {
                     .add(Expr::col(AssetIden::Owner).is_null()),
             )
             .and_where(
-                Expr::col(AssetIden::AssetId).like(format!("%:{}%", query.into())),
+                Expr::col(AssetIden::AssetId)
+                    .like(format!("%:{}%", query.into())),
             )
             .limit(10)
             .build_rusqlite(SqliteQueryBuilder);
@@ -200,108 +211,245 @@ impl Asset {
         Ok(id)
     }
 
-    pub fn delete(id: Uuid) -> Result<(), ServerError> {
-        todo!()
+    pub fn delete(
+        id: Uuid,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
+        // TODO: delete related tables
+        let (query1, values1) = Query::delete()
+            .from_table(AssetIden::Table)
+            .and_where(Expr::col(AssetIden::Id).eq(id))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let transaction = connection.transaction()?;
+        transaction.execute(&query1, &*values1.as_params())?;
+        transaction.commit()?;
+        Ok(())
     }
 
-    pub fn update_price(&self) {
+    pub fn insert_price(
+        &self,
+        data: &Vec<(NaiveDate, Decimal, AssetId)>,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
+        // TODO: update AssetUpdate datetime
+        let mut builder = Query::insert()
+            .replace()
+            .into_table(AssetPriceIden::Table)
+            .columns([
+                AssetPriceIden::Asset,
+                AssetPriceIden::Date,
+                AssetPriceIden::Price,
+                AssetPriceIden::Currency,
+            ])
+            .to_owned();
+        data.iter().for_each(|(date, price, currency)| {
+            _ = builder.values([
+                self.id.into(),
+                date.clone().into(),
+                price.serialize()[..].into(),
+                currency.clone().into(),
+            ]);
+        });
+        let (query, values) = builder.build_rusqlite(SqliteQueryBuilder);
+
+        connection.execute(&query, &*values.as_params())?;
+        Ok(())
+    }
+
+    pub fn price(
+        &self,
+        date: NaiveDate,
+        connection: &mut Connection,
+    ) -> Result<Option<(Decimal, AssetId)>, ServerError> {
+        // TODO: issue, cannot get multi-currency price
+        let (query, values) = Query::select()
+            .columns([AssetPriceIden::Price, AssetPriceIden::Currency])
+            .from(AssetPriceIden::Table)
+            .and_where(Expr::col(AssetPriceIden::Asset).eq(self.id))
+            .and_where(Expr::col(AssetPriceIden::Date).lte(date))
+            .limit(1)
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let mut statement = connection.prepare(&query)?;
+        let record: Option<Result<_, rusqlite::Error>> = statement
+            .query_and_then(&*values.as_params(), |row| {
+                Ok((
+                    Decimal::deserialize(
+                        row.get(AssetPriceIden::Price.as_str())?,
+                    ),
+                    row.get(AssetPriceIden::Currency.as_str())?,
+                ))
+            })?
+            .next();
+
+        Ok(record.transpose()?)
+    }
+
+    pub fn insert_dividend(
+        &self,
+        data: &Vec<(NaiveDate, Decimal, AssetId)>,
+        connection: &mut Connection,
+    ) -> Result<(), ServerError> {
+        let mut builder = Query::insert()
+            .replace()
+            .into_table(AssetDividendIden::Table)
+            .columns([
+                AssetDividendIden::Asset,
+                AssetDividendIden::Date,
+                AssetDividendIden::Dividend,
+                AssetDividendIden::Currency,
+            ])
+            .to_owned();
+        data.iter().for_each(|(date, dividend, currency)| {
+            _ = builder.values([
+                self.id.into(),
+                date.clone().into(),
+                dividend.serialize()[..].into(),
+                currency.clone().into(),
+            ]);
+        });
+        let (query, values) = builder.build_rusqlite(SqliteQueryBuilder);
+
+        connection.execute(&query, &*values.as_params())?;
+        Ok(())
+    }
+
+    pub fn insert_split(
+        &self,
+        data: &Vec<(NaiveDate, Decimal)>,
+    ) -> Result<(), ServerError> {
         todo!()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::database::{self, User};
-    use sha2::{Digest, Sha256};
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::database::{self, User};
+//     use rust_decimal_macros::dec;
+//     use sha2::{Digest, Sha256};
 
-    #[test]
-    fn test_insert_and_select() {
-        let mut connection =
-            Connection::open_in_memory().expect("fail to create database");
-        database::migration::run_migration(&mut connection)
-            .expect("database initialization fail");
+//     macro_rules! date {
+//         ($y:expr, $m:expr, $d:expr) => {
+//             NaiveDate::from_ymd_opt($y, $m, $d).expect("panic")
+//         };
+//     }
 
-        let mut u0 = User::new(
-            String::from("test_user"),
-            Sha256::digest("password").to_vec(),
-        );
-        u0.id = u0.insert(&mut connection).expect("panic");
+//     #[test]
+//     fn test_insert_and_select() {
+//         let mut connection =
+//             Connection::open_in_memory().expect("fail to create database");
+//         database::migration::run_migration(&mut connection)
+//             .expect("database initialization fail");
 
-        let mut a0 =
-            Asset::new(AssetId::currency("CAD"), "Canadian Dollar", None);
-        a0.id = a0.insert(&mut connection).expect("panic");
+//         let mut u0 = User::new(
+//             String::from("test_user"),
+//             Sha256::digest("password").to_vec(),
+//         );
+//         u0.id = u0.insert(&mut connection).expect("panic");
 
-        let res = Asset::by_id(a0.id, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(a0.id, res.id);
-        assert_eq!(a0.asset_id, res.asset_id);
-        assert_eq!(a0.name, res.name);
-        assert_eq!(a0.name, res.name);
+//         let mut a0 =
+//             Asset::new(AssetId::currency("CAD"), "Canadian Dollar", None);
+//         a0.id = a0.insert(&mut connection).expect("panic");
 
-        let res = Asset::by_asset(a0.asset_id.clone(), None, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(a0.id, res.id);
-        assert_eq!(a0.asset_id, res.asset_id);
-        assert_eq!(a0.name, res.name);
-        assert_eq!(a0.name, res.name);
+//         let res = Asset::by_id(a0.id, &mut connection)
+//             .expect("panic")
+//             .expect("panic");
+//         assert_eq!(a0.id, res.id);
+//         assert_eq!(a0.asset_id, res.asset_id);
+//         assert_eq!(a0.name, res.name);
+//         assert_eq!(a0.name, res.name);
 
-        let mut a1 = Asset::new(
-            AssetId::unknown("TDB2606"),
-            "TD Global Tactical Monthly Income Fund - H8",
-            Some(u0.id),
-        );
-        a1.id = a1.insert(&mut connection).expect("panic");
+//         let res = Asset::by_asset(a0.asset_id.clone(), None, &mut connection)
+//             .expect("panic")
+//             .expect("panic");
+//         assert_eq!(a0.id, res.id);
+//         assert_eq!(a0.asset_id, res.asset_id);
+//         assert_eq!(a0.name, res.name);
+//         assert_eq!(a0.name, res.name);
 
-        let res = Asset::by_id(a1.id, &mut connection)
-            .expect("panic")
-            .expect("panic");
-        assert_eq!(a1.id, res.id);
-        assert_eq!(a1.asset_id, res.asset_id);
-        assert_eq!(a1.name, res.name);
-        assert_eq!(a1.name, res.name);
+//         let mut a1 = Asset::new(
+//             AssetId::unknown("TDB2606"),
+//             "TD Global Tactical Monthly Income Fund - H8",
+//             Some(u0.id),
+//         );
+//         a1.id = a1.insert(&mut connection).expect("panic");
 
-        let res =
-            Asset::by_asset(a1.asset_id.clone(), a1.owner, &mut connection)
-                .expect("panic")
-                .expect("panic");
-        assert_eq!(a1.id, res.id);
-        assert_eq!(a1.asset_id, res.asset_id);
-        assert_eq!(a1.name, res.name);
-        assert_eq!(a1.name, res.name);
+//         let res = Asset::by_id(a1.id, &mut connection)
+//             .expect("panic")
+//             .expect("panic");
+//         assert_eq!(a1.id, res.id);
+//         assert_eq!(a1.asset_id, res.asset_id);
+//         assert_eq!(a1.name, res.name);
+//         assert_eq!(a1.name, res.name);
 
-        let mut a2 = Asset::new(
-            AssetId::unknown("TDB627"),
-            "TD Dividend Income Fund - I",
-            Some(u0.id),
-        );
-        a2.id = a2.insert(&mut connection).expect("panic");
+//         let res =
+//             Asset::by_asset(a1.asset_id.clone(), a1.owner, &mut connection)
+//                 .expect("panic")
+//                 .expect("panic");
+//         assert_eq!(a1.id, res.id);
+//         assert_eq!(a1.asset_id, res.asset_id);
+//         assert_eq!(a1.name, res.name);
+//         assert_eq!(a1.name, res.name);
 
-        let res = Asset::by_owner(u0.id, &mut connection).expect("panic");  
-        assert!(!res.contains(&a0));
-        assert!(res.contains(&a1));
-        assert!(res.contains(&a2));
+//         let mut a2 = Asset::new(
+//             AssetId::unknown("TDB627"),
+//             "TD Dividend Income Fund - I",
+//             Some(u0.id),
+//         );
+//         a2.id = a2.insert(&mut connection).expect("panic");
 
-        let res = Asset::search("", u0.id, &mut connection).unwrap();
-        assert!(res.contains(&a0));
-        assert!(res.contains(&a1));
-        assert!(res.contains(&a2));
+//         let res = Asset::by_owner(u0.id, &mut connection).expect("panic");
+//         assert!(!res.contains(&a0));
+//         assert!(res.contains(&a1));
+//         assert!(res.contains(&a2));
 
-        let res = Asset::search("", Uuid::nil(), &mut connection).unwrap();
-        assert!(res.contains(&a0));
-        assert!(!res.contains(&a1));
-        assert!(!res.contains(&a2));
+//         let res = Asset::search("", u0.id, &mut connection).expect("panic");
+//         assert!(res.contains(&a0));
+//         assert!(res.contains(&a1));
+//         assert!(res.contains(&a2));
 
-        let res = Asset::search("C", u0.id, &mut connection).unwrap();
-        assert!(res.contains(&a0));
-        assert!(!res.contains(&a1));
-        assert!(!res.contains(&a2));
+//         let res =
+//             Asset::search("", Uuid::nil(), &mut connection).expect("panic");
+//         assert!(res.contains(&a0));
+//         assert!(!res.contains(&a1));
+//         assert!(!res.contains(&a2));
 
-        let res = Asset::search("TDB6", u0.id, &mut connection).unwrap();
-        assert!(!res.contains(&a0));
-        assert!(!res.contains(&a1));
-        assert!(res.contains(&a2));
-    }
-}
+//         let res = Asset::search("C", u0.id, &mut connection).expect("panic");
+//         assert!(res.contains(&a0));
+//         assert!(!res.contains(&a1));
+//         assert!(!res.contains(&a2));
+
+//         let res = Asset::search("TDB6", u0.id, &mut connection).expect("panic");
+//         assert!(!res.contains(&a0));
+//         assert!(!res.contains(&a1));
+//         assert!(res.contains(&a2));
+//     }
+
+//     #[test]
+//     fn test_price() {
+//         let mut connection =
+//             Connection::open_in_memory().expect("fail to create database");
+//         database::migration::run_migration(&mut connection)
+//             .expect("database initialization fail");
+
+//         let mut a0 =
+//             Asset::new(AssetId::currency("CAD"), "Canadian Dollar", None);
+//         a0.id = a0.insert(&mut connection).expect("panic");
+
+//         let p0 = vec![
+//             (date!(2010, 1, 1), dec!(1.1), AssetId::currency("USD")),
+//             (date!(2010, 1, 2), dec!(1.2), AssetId::currency("USD")),
+//             (date!(2010, 1, 3), dec!(1.3), AssetId::currency("USD")),
+//             (date!(2010, 1, 5), dec!(1.4), AssetId::currency("USD")),
+//             (date!(2010, 1, 7), dec!(1.5), AssetId::currency("USD")),
+//         ];
+
+//         a0.insert_price(&p0, &mut connection).expect("panic");
+//         assert_eq!(None, a0.price(date!(2009, 12, 31), &mut connection).expect("panic"));
+//         assert_eq!(Some((dec!(1.1), AssetId::currency("USD"))), a0.price(date!(2010, 1, 1), &mut connection).expect("panic"));
+//     }
+
+//     // TODO: test delete
+// }

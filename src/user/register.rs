@@ -14,7 +14,8 @@ struct RequestData {
 pub async fn handler(
     request: web::Json<RequestData>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     // input check
     if request.username.len() < 6 {
@@ -27,7 +28,7 @@ pub async fn handler(
         request.username.clone(),
         Sha256::digest(request.password.clone()).to_vec(),
     )
-    .insert(&mut connection)?;
-
+    .insert(&tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }
