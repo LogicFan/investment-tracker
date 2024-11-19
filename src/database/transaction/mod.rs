@@ -171,160 +171,186 @@ impl Transaction {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::database::account::AccountKind;
-//     use crate::database::asset::AssetId;
-//     use crate::database::{self, Account, User};
-//     use rust_decimal_macros::dec;
-//     use sha2::{Digest, Sha256};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::account::AccountKind;
+    use crate::database::asset::AssetId;
+    use crate::database::{self, Account, User};
+    use rusqlite::Connection;
+    use rust_decimal_macros::dec;
+    use sha2::{Digest, Sha256};
 
-//     #[test]
-//     fn test_insert_and_select() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
+    #[test]
+    fn test_insert_and_select() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//         let mut u0 = User::new(
-//             String::from("test_user"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert(&mut connection).expect("panic");
+        let a0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut u0 = User::new(
+                String::from("test_user"),
+                Sha256::digest("password").to_vec(),
+            );
+            u0.id = u0.insert(&tran)?;
+            let mut a0 =
+                Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+            a0.id = a0.insert(&tran)?;
+            tran.commit()?;
+            a0
+        };
+        let (t0, t1) = {
+            let tran = conn.transaction()?;
+            let mut t0 = Transaction::new(
+                a0.id,
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Deposit {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            t0.id = t0.insert(&tran)?;
+            let mut t1 = Transaction::new(
+                a0.id,
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Withdrawal {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            t1.id = t1.insert(&tran)?;
+            tran.commit()?;
+            (t0, t1)
+        };
+        {
+            let tran = conn.transaction()?;
+            let res =
+                Transaction::by_id(t0.id, &tran)?.expect("no transaction");
+            assert_eq!(t0.id, res.id);
+            assert_eq!(t0.date, res.date);
+            assert_eq!(t0.action, res.action);
+        }
+        {
+            let tran = conn.transaction()?;
+            let res = Transaction::by_account(a0.id, &tran)?;
+            assert!(res.contains(&t0));
+            assert!(res.contains(&t1));
+        }
 
-//         let mut a0 =
-//             Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-//         a0.id = a0.insert(&mut connection).expect("panic");
+        Ok(())
+    }
 
-//         let mut t0 = Transaction::new(
-//             a0.id,
-//             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-//             TxnAction::Deposit {
-//                 value: (dec!(100.0), AssetId::currency("CAD")),
-//                 fee: (dec!(0.0), AssetId::currency("CAD")),
-//             },
-//         );
-//         t0.id = t0.insert(&mut connection).expect("panic");
+    #[test]
+    fn test_no_account() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//         let res = Transaction::by_id(t0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(t0.id, res.id);
-//         assert_eq!(t0.date, res.date);
-//         assert_eq!(t0.action, res.action);
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        {
+            let tran = conn.transaction()?;
+            let t0 = Transaction::new(
+                Uuid::nil(),
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Withdrawal {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            t0.insert(&tran)
+                .expect_err("insert transaction with invalid account");
+        }
 
-//         let mut t1 = Transaction::new(
-//             a0.id,
-//             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-//             TxnAction::Withdrawal {
-//                 value: (dec!(100.0), AssetId::currency("CAD")),
-//                 fee: (dec!(0.0), AssetId::currency("CAD")),
-//             },
-//         );
-//         t1.id = t1.insert(&mut connection).expect("panic");
+        Ok(())
+    }
 
-//         let res =
-//             Transaction::by_account(a0.id, &mut connection).expect("panic");
-//         assert!(res.contains(&t0));
-//         assert!(res.contains(&t1));
-//     }
+    #[test]
+    fn test_update() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//     #[test]
-//     fn test_no_account() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
+        let mut t0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut u0 = User::new(
+                String::from("test_user"),
+                Sha256::digest("password").to_vec(),
+            );
+            u0.id = u0.insert(&tran)?;
+            let mut a0 =
+                Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+            a0.id = a0.insert(&tran)?;
+            let mut t0 = Transaction::new(
+                a0.id,
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Deposit {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            t0.id = t0.insert(&tran)?;
+            tran.commit()?;
+            t0
+        };
+        {
+            let tran = conn.transaction()?;
+            t0.date = NaiveDate::from_ymd_opt(2021, 1, 1).unwrap();
+            t0.update(&tran)?;
+            tran.commit()?;
+            let tran = conn.transaction()?;
+            let res =
+                Transaction::by_id(t0.id, &tran)?.expect("no transaction");
+            assert_eq!(t0.date, res.date);
+        }
+        {
+            let tran = conn.transaction()?;
+            t0.action = TxnAction::Fee {
+                value: (dec!(1.0), AssetId::currency("CAD")),
+                reason: String::from("Management Fee"),
+            };
+            t0.update(&tran)?;
+            tran.commit()?;
+            let tran = conn.transaction()?;
+            let res =
+                Transaction::by_id(t0.id, &tran)?.expect("no transaction");
+            assert_eq!(t0.date, res.date);
+        }
+        Ok(())
+    }
 
-//         let t0 = Transaction::new(
-//             Uuid::nil(),
-//             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-//             TxnAction::Withdrawal {
-//                 value: (dec!(100.0), AssetId::currency("CAD")),
-//                 fee: (dec!(0.0), AssetId::currency("CAD")),
-//             },
-//         );
-//         t0.insert(&mut connection)
-//             .expect_err("insert transaction with invalid account");
-//     }
+    #[test]
+    fn test_delete() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//     #[test]
-//     fn test_update() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
-
-//         let mut u0 = User::new(
-//             String::from("test_user"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert(&mut connection).expect("panic");
-
-//         let mut a0 =
-//             Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-//         a0.id = a0.insert(&mut connection).expect("panic");
-
-//         let mut t0 = Transaction::new(
-//             a0.id,
-//             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-//             TxnAction::Deposit {
-//                 value: (dec!(100.0), AssetId::currency("CAD")),
-//                 fee: (dec!(0.0), AssetId::currency("CAD")),
-//             },
-//         );
-//         t0.id = t0.insert(&mut connection).expect("panic");
-
-//         t0.date = NaiveDate::from_ymd_opt(2021, 1, 1).unwrap();
-//         t0.update(&mut connection).expect("panic");
-//         let res = Transaction::by_id(t0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(t0.date, res.date);
-
-//         t0.action = TxnAction::Fee {
-//             value: (dec!(1.0), AssetId::currency("CAD")),
-//             reason: String::from("Management Fee"),
-//         };
-//         t0.update(&mut connection).expect("panic");
-//         let res = Transaction::by_id(t0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(t0.date, res.date);
-//     }
-
-//     #[test]
-//     fn test_delete() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
-
-//         let mut u0 = User::new(
-//             String::from("test_user"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert(&mut connection).expect("panic");
-
-//         let mut a0 =
-//             Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-//         a0.id = a0.insert(&mut connection).expect("panic");
-
-//         let mut t0 = Transaction::new(
-//             a0.id,
-//             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-//             TxnAction::Deposit {
-//                 value: (dec!(100.0), AssetId::currency("CAD")),
-//                 fee: (dec!(0.0), AssetId::currency("CAD")),
-//             },
-//         );
-//         t0.id = t0.insert(&mut connection).expect("panic");
-
-//         Transaction::delete(t0.id, &mut connection).expect("panic");
-//         assert_eq!(
-//             None,
-//             Transaction::by_id(t0.id, &mut connection).expect("panic")
-//         );
-//     }
-// }
+        let t0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut u0 = User::new(
+                String::from("test_user"),
+                Sha256::digest("password").to_vec(),
+            );
+            u0.id = u0.insert(&tran)?;
+            let mut a0 =
+                Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+            a0.id = a0.insert(&tran)?;
+            let mut t0 = Transaction::new(
+                a0.id,
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Deposit {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            t0.id = t0.insert(&tran)?;
+            tran.commit()?;
+            t0
+        };
+        {
+            let tran = conn.transaction()?;
+            Transaction::delete(t0.id, &tran)?;
+            assert_eq!(None, Transaction::by_id(t0.id, &tran)?);
+        }
+        Ok(())
+    }
+}
