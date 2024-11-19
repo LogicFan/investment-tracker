@@ -187,143 +187,195 @@ impl Account {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::database::{self, User};
-//     use chrono::NaiveDate;
-//     use rust_decimal_macros::dec;
-//     use sha2::{Digest, Sha256};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::{self, User};
+    use chrono::NaiveDate;
+    use rusqlite::Connection;
+    use rust_decimal_macros::dec;
+    use sha2::{Digest, Sha256};
 
-//     #[test]
-//     fn test_insert_and_select() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
+    #[test]
+    fn test_insert_and_select() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//         let mut u0 = User::new(
-//             String::from("test_user"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert(&mut connection).expect("panic");
+        let u0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut u0 = User::new(
+                String::from("test_user"),
+                Sha256::digest("password").to_vec(),
+            );
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?;
+            u0
+        };
+        let (a0, a1) = {
+            let tran = conn.transaction()?;
+            let mut a0 = Account::new(
+                "test_account_0",
+                "alias",
+                u0.id,
+                AccountKind::NRA,
+            );
+            a0.id = a0.insert(&tran)?;
+            let mut a1 = Account::new(
+                "test_account_1",
+                "alias2",
+                u0.id,
+                AccountKind::TFSA,
+            );
+            a1.id = a1.insert(&tran)?;
+            tran.commit()?;
+            (a0, a1)
+        };
+        {
+            let tran = conn.transaction()?;
+            let res = Account::by_id(a0.id, &tran)?.expect("no account");
+            assert_eq!(a0.id, res.id);
+            assert_eq!(a0.name, res.name);
+            assert_eq!(a0.alias, res.alias);
+            assert_eq!(a0.owner, res.owner);
+            assert_eq!(a0.kind, res.kind);
+        }
+        {
+            let tran = conn.transaction()?;
+            let res = Account::by_owner(u0.id, &tran)?;
+            assert!(res.contains(&a0));
+            assert!(res.contains(&a1));
+        }
 
-//         let mut a0 =
-//             Account::new("test_account_0", "alias", u0.id, AccountKind::NRA);
-//         a0.id = a0.insert(&mut connection).expect("panic");
+        Ok(())
+    }
 
-//         let mut a1 =
-//             Account::new("test_account_1", "alias2", u0.id, AccountKind::TFSA);
-//         a1.id = a1.insert(&mut connection).expect("panic");
+    #[test]
+    fn test_no_owner() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//         let res = Account::by_id(a0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(a0.id, res.id);
-//         assert_eq!(a0.name, res.name);
-//         assert_eq!(a0.alias, res.alias);
-//         assert_eq!(a0.owner, res.owner);
-//         assert_eq!(a0.kind, res.kind);
+        {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            tran.commit()?;
+        }
+        {
+            let tran = conn.transaction()?;
+            let a0 = Account::new(
+                "test_account",
+                "alias",
+                Uuid::nil(),
+                AccountKind::NRA,
+            );
+            a0.insert(&tran)
+                .expect_err("insert account with invalid owner");
+        }
 
-//         let res = Account::by_owner(u0.id, &mut connection).expect("panic");
-//         assert!(res.contains(&a0));
-//         assert!(res.contains(&a1));
-//     }
+        Ok(())
+    }
 
-//     #[test]
-//     fn test_no_owner() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
+    #[test]
+    fn test_update() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
 
-//         let a0 = Account::new(
-//             "test_account",
-//             "alias",
-//             Uuid::nil(),
-//             AccountKind::NRA,
-//         );
-//         a0.insert(&mut connection)
-//             .expect_err("insert account with invalid owner");
-//     }
+        let u0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut u0 = User::new(
+                String::from("test_user"),
+                Sha256::digest("password").to_vec(),
+            );
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?;
+            u0
+        };
+        let mut a0 = {
+            let tran = conn.transaction()?;
+            let mut a0 = Account::new(
+                "test_account_0",
+                "alias",
+                u0.id,
+                AccountKind::NRA,
+            );
+            a0.id = a0.insert(&tran)?;
+            tran.commit()?;
+            a0
+        };
+        {
+            let tran = conn.transaction()?;
+            a0.name = String::from("test_account_1");
+            a0.update(&tran)?;
+            tran.commit()?;
+            let tran = conn.transaction()?;
+            let res = Account::by_id(a0.id, &tran)?.expect("no account");
+            assert_eq!(a0.name, res.name);
+        }
+        {
+            let tran = conn.transaction()?;
+            a0.alias = String::from("alias2");
+            a0.update(&tran)?;
+            tran.commit()?;
+            let tran = conn.transaction()?;
+            let res = Account::by_id(a0.id, &tran)?.expect("no account");
+            assert_eq!(a0.alias, res.alias);
+        }
+        {
+            let tran = conn.transaction()?;
+            a0.kind = AccountKind::TFSA;
+            a0.update(&tran)?;
+            tran.commit()?;
+            let tran = conn.transaction()?;
+            let res = Account::by_id(a0.id, &tran)?.expect("no account");
+            assert_eq!(a0.kind, res.kind);
+        }
 
-//     #[test]
-//     fn test_update() {
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
+        Ok(())
+    }
 
-//         let mut u0 = User::new(
-//             String::from("test_user"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert(&mut connection).expect("panic");
+    #[test]
+    fn test_delete() -> Result<(), ServerError> {
+        use database::asset::AssetId;
+        use database::transaction::{Transaction, TxnAction};
+        let mut conn = Connection::open_in_memory()?;
 
-//         let mut a0 =
-//             Account::new("test_account_0", "alias", u0.id, AccountKind::NRA);
-//         a0.id = a0.insert(&mut connection).expect("panic");
+        let u0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut u0 = User::new(
+                String::from("test_user"),
+                Sha256::digest("password").to_vec(),
+            );
+            u0.id = u0.insert(&tran)?;
+            tran.commit()?;
+            u0
+        };
+        let (a0, t0) = {
+            let tran = conn.transaction()?;
+            let mut a0 =
+                Account::new("test_account", "alias", u0.id, AccountKind::NRA);
+            a0.id = a0.insert(&tran)?;
+            let mut t0 = Transaction::new(
+                a0.id,
+                NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+                TxnAction::Deposit {
+                    value: (dec!(100.0), AssetId::currency("CAD")),
+                    fee: (dec!(0.0), AssetId::currency("CAD")),
+                },
+            );
+            tran.commit()?;
+            t0.id = t0.insert(&mut conn)?;
+            (a0, t0)
+        };
+        {
+            let tran = conn.transaction()?;
+            Account::delete(a0.id, &tran)?;
+            tran.commit()?;
 
-//         a0.name = String::from("test_account_1");
-//         a0.update(&mut connection).expect("panic");
-//         let res = Account::by_id(a0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(a0.name, res.name);
-
-//         a0.alias = String::from("alias2");
-//         a0.update(&mut connection).expect("panic");
-//         let res = Account::by_id(a0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(a0.alias, res.alias);
-
-//         a0.kind = AccountKind::TFSA;
-//         a0.update(&mut connection).expect("panic");
-//         let res = Account::by_id(a0.id, &mut connection)
-//             .expect("panic")
-//             .expect("panic");
-//         assert_eq!(a0.kind, res.kind);
-//     }
-
-//     #[test]
-//     fn test_delete() {
-//         use database::asset::AssetId;
-//         use database::transaction::{Transaction, TxnAction};
-
-//         let mut connection =
-//             Connection::open_in_memory().expect("fail to create database");
-//         database::migration::run_migration(&mut connection)
-//             .expect("database initialization fail");
-
-//         let mut u0 = User::new(
-//             String::from("test_user"),
-//             Sha256::digest("password").to_vec(),
-//         );
-//         u0.id = u0.insert(&mut connection).expect("panic");
-
-//         let mut a0 =
-//             Account::new("test_account", "alias", u0.id, AccountKind::NRA);
-//         a0.id = a0.insert(&mut connection).expect("panic");
-
-//         let mut t0 = Transaction::new(
-//             a0.id,
-//             NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-//             TxnAction::Deposit {
-//                 value: (dec!(100.0), AssetId::currency("CAD")),
-//                 fee: (dec!(0.0), AssetId::currency("CAD")),
-//             },
-//         );
-//         t0.id = t0.insert(&mut connection).expect("panic");
-
-//         Account::delete(a0.id, &mut connection).expect("panic");
-//         assert_eq!(
-//             None,
-//             Transaction::by_id(t0.id, &mut connection).expect("panic")
-//         );
-//         assert_eq!(
-//             None,
-//             Account::by_id(a0.id, &mut connection).expect("panic")
-//         );
-//     }
-// }
+            let tran = conn.transaction()?;
+            // assert_eq!(None, Transaction::by_id(t0.id, &mut connection)?);
+            assert_eq!(None, Account::by_id(a0.id, &tran)?);
+            tran.commit()?;
+            assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
+        }
+        Ok(())
+    }
+}
