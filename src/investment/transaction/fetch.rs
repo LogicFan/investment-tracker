@@ -24,7 +24,6 @@ pub async fn handler(
         }
         Some(a) => a,
     };
-    tran.commit()?;
 
     // permission check
     match authenticate(&request.token)? {
@@ -32,6 +31,7 @@ pub async fn handler(
         _ => return Ok(HttpResponse::Forbidden().finish()),
     };
 
-    let transactions = Transaction::by_account(request.account, &mut conn)?;
+    let transactions = Transaction::by_account(request.account, &tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().json(transactions))
 }

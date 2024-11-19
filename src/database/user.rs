@@ -60,7 +60,7 @@ impl User {
 impl User {
     pub fn by_id(
         id: Uuid,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -74,7 +74,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = sql_transaction.prepare(&query)?;
+        let mut statement = transaction.prepare(&query)?;
         let record = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
@@ -84,7 +84,7 @@ impl User {
 
     pub fn by_username(
         username: impl Into<String>,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<Option<User>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -98,7 +98,7 @@ impl User {
             .and_where(Expr::col(UserIden::Username).eq(username.into()))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = sql_transaction.prepare(&query)?;
+        let mut statement = transaction.prepare(&query)?;
         let record = statement
             .query_and_then(&*values.as_params(), |row| User::try_from(row))?
             .next();
@@ -108,7 +108,7 @@ impl User {
 
     pub fn delete(
         id: Uuid,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         {
             use super::account::{Account, AccountIden};
@@ -117,11 +117,11 @@ impl User {
                 .from(AccountIden::Table)
                 .and_where(Expr::col(AccountIden::Owner).eq(id))
                 .build_rusqlite(SqliteQueryBuilder);
-            let mut statement = sql_transaction.prepare(&query)?;
+            let mut statement = transaction.prepare(&query)?;
             statement
                 .query_and_then(&*values.as_params(), |row| row.get(0))?
                 .try_for_each(|x: Result<Uuid, _>| {
-                    Account::delete(x?, &sql_transaction)
+                    Account::delete(x?, &transaction)
                 })?;
         }
 
@@ -131,13 +131,13 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        sql_transaction.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
     pub fn insert(
         &self,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
@@ -152,13 +152,13 @@ impl User {
             ])?
             .build_rusqlite(SqliteQueryBuilder);
 
-        sql_transaction.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(id)
     }
 
     pub fn update(
         &self,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(UserIden::Table)
@@ -169,7 +169,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        sql_transaction.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
@@ -180,7 +180,7 @@ impl User {
 
     pub fn attempts(
         &self,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<u64, ServerError> {
         let (query, values) = Query::select()
             .expr_as(
@@ -199,7 +199,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut statement = sql_transaction.prepare(&query)?;
+        let mut statement = transaction.prepare(&query)?;
         let record: Result<u64, rusqlite::Error> = statement
             .query_and_then(&*values.as_params(), |row| {
                 row.get(UserIden::Attempts.as_str())
@@ -212,7 +212,7 @@ impl User {
 
     pub fn add_attempt(
         &self,
-        sql_transaction: &SqlTransaction,
+        transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(UserIden::Table)
@@ -235,7 +235,7 @@ impl User {
             .and_where(Expr::col(UserIden::Id).eq(self.id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        sql_transaction.execute(&query, &*values.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
 
         Ok(())
     }

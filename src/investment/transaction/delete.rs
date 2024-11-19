@@ -16,10 +16,11 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     let transaction =
-        match Transaction::by_id(request.transaction_id, &mut connection)? {
+        match Transaction::by_id(request.transaction_id, &tran)? {
             None => {
                 return Ok(HttpResponse::BadRequest()
                     .body("transaction does not exist"))
@@ -27,10 +28,10 @@ pub async fn handler(
             Some(t) => t,
         };
 
-    if !has_permission(&transaction, &request.token, &mut connection)? {
+    if !has_permission(&transaction, &request.token, &tran)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    Transaction::delete(transaction.id, &mut connection)?;
+    Transaction::delete(transaction.id, &tran)?;
     Ok(HttpResponse::Ok().finish())
 }

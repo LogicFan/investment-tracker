@@ -14,10 +14,11 @@ struct Request {
 pub async fn handler(
     request: web::Json<Request>,
 ) -> Result<impl Responder, ServerError> {
-    let mut connection = get_connection()?;
+    let mut conn = get_connection()?;
+    let tran = conn.transaction()?;
 
     let transaction =
-        match Transaction::by_id(request.transaction.id, &mut connection)? {
+        match Transaction::by_id(request.transaction.id, &tran)? {
             None => {
                 return Ok(HttpResponse::BadRequest()
                     .body("transaction does not exist"))
@@ -26,7 +27,7 @@ pub async fn handler(
         };
 
     // permission check
-    if !has_permission(&transaction, &request.token, &mut connection)? {
+    if !has_permission(&transaction, &request.token, &tran)? {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
@@ -36,11 +37,12 @@ pub async fn handler(
             HttpResponse::BadRequest().body("account cannot be modified")
         );
     } else if let Some(err) =
-        validate_input(&request.transaction, &mut connection)
+        validate_input(&request.transaction, &tran)
     {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.transaction.update(&mut connection)?;
+    request.transaction.update(&tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }

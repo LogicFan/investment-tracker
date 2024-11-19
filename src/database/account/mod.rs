@@ -3,7 +3,7 @@ mod kind;
 use crate::error::ServerError;
 use core::str;
 pub use kind::AccountKind;
-use rusqlite::Row;
+use rusqlite::{Row, Transaction as SqlTransaction};
 use sea_query::{enum_def, Expr, IdenStatic, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
@@ -58,10 +58,7 @@ impl Account {
         }
     }
 
-    pub fn owner(
-        &self,
-        transaction: &rusqlite::Transaction,
-    ) -> Option<super::User> {
+    pub fn owner(&self, transaction: &SqlTransaction) -> Option<super::User> {
         match super::User::by_id(self.owner, &transaction) {
             Ok(Some(user)) => Some(user),
             _ => None,
@@ -72,7 +69,7 @@ impl Account {
 impl Account {
     pub fn by_id(
         id: Uuid,
-        transaction: &rusqlite::Transaction,
+        transaction: &SqlTransaction,
     ) -> Result<Option<Account>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -96,7 +93,7 @@ impl Account {
 
     pub fn by_owner(
         owner: Uuid,
-        transaction: &rusqlite::Transaction,
+        transaction: &SqlTransaction,
     ) -> Result<Vec<Account>, ServerError> {
         let (query, values) = Query::select()
             .columns([
@@ -120,27 +117,35 @@ impl Account {
 
     pub fn delete(
         id: Uuid,
-        transaction: &rusqlite::Transaction,
+        transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
-        use super::transaction::TransactionIden;
-        let (query1, values1) = Query::delete()
-            .from_table(TransactionIden::Table)
-            .and_where(Expr::col(TransactionIden::Account).eq(id))
-            .build_rusqlite(SqliteQueryBuilder);
+        {
+            use super::transaction::{Transaction, TransactionIden};
+            let (query, values) = Query::select()
+                .columns([TransactionIden::Id])
+                .from(TransactionIden::Table)
+                .and_where(Expr::col(TransactionIden::Account).eq(id))
+                .build_rusqlite(SqliteQueryBuilder);
+            let mut statement = transaction.prepare(&query)?;
+            statement
+                .query_and_then(&*values.as_params(), |row| row.get(0))?
+                .try_for_each(|x: Result<Uuid, _>| {
+                    Transaction::delete(x?, &transaction)
+                })?;
+        }
 
-        let (query2, values2) = Query::delete()
+        let (query, values) = Query::delete()
             .from_table(AccountIden::Table)
             .and_where(Expr::col(AccountIden::Id).eq(id))
             .build_rusqlite(SqliteQueryBuilder);
 
-        transaction.execute(&query1, &*values1.as_params())?;
-        transaction.execute(&query2, &*values2.as_params())?;
+        transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
 
     pub fn insert(
         &self,
-        transaction: &rusqlite::Transaction,
+        transaction: &SqlTransaction,
     ) -> Result<Uuid, ServerError> {
         assert!(self.id.is_nil());
 
@@ -169,7 +174,7 @@ impl Account {
 
     pub fn update(
         &self,
-        transaction: &rusqlite::Transaction,
+        transaction: &SqlTransaction,
     ) -> Result<(), ServerError> {
         let (query, values) = Query::update()
             .table(AccountIden::Table)
@@ -361,8 +366,8 @@ mod tests {
                     fee: (dec!(0.0), AssetId::currency("CAD")),
                 },
             );
+            t0.id = t0.insert(&tran)?;
             tran.commit()?;
-            t0.id = t0.insert(&mut conn)?;
             (a0, t0)
         };
         {
@@ -371,10 +376,8 @@ mod tests {
             tran.commit()?;
 
             let tran = conn.transaction()?;
-            // assert_eq!(None, Transaction::by_id(t0.id, &mut connection)?);
+            assert_eq!(None, Transaction::by_id(t0.id, &tran)?);
             assert_eq!(None, Account::by_id(a0.id, &tran)?);
-            tran.commit()?;
-            assert_eq!(None, Transaction::by_id(t0.id, &mut conn)?);
         }
         Ok(())
     }

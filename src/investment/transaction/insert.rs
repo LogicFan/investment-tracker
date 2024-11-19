@@ -24,7 +24,6 @@ pub async fn handler(
         }
         Some(a) => a,
     };
-    tran.commit()?;
 
     // permission check
     match authenticate(&request.token)? {
@@ -36,10 +35,11 @@ pub async fn handler(
         return Ok(
             HttpResponse::BadRequest().body("transaction id should be nil")
         );
-    } else if let Some(err) = validate_input(&request.transaction, &mut conn) {
+    } else if let Some(err) = validate_input(&request.transaction, &tran) {
         return Ok(HttpResponse::BadRequest().body(err));
     }
 
-    request.transaction.insert(&mut conn)?;
+    request.transaction.insert(&tran)?;
+    tran.commit()?;
     Ok(HttpResponse::Ok().finish())
 }
