@@ -32,19 +32,29 @@ struct Claims {
     exp: u64,
 }
 
-pub fn authenticate(token: &str) -> Result<Option<Uuid>, SystemTimeError> {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+pub trait AsUser {
+    fn user_id(&self) -> Result<Option<Uuid>, SystemTimeError>;
+}
 
-    match token.verify_with_key(&*PRIVATE_KEY).ok() {
-        Some(token) => {
-            let token: Token<Header, Claims, _> = token;
-            let claims: &Claims = token.claims();
-            if claims.exp > now {
-                return Ok(Some(claims.iss));
+impl AsUser for str {
+    fn user_id(&self) -> Result<Option<Uuid>, SystemTimeError> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+
+        match self.verify_with_key(&*PRIVATE_KEY).ok() {
+            Some(token) => {
+                let token: Token<Header, Claims, _> = token;
+                let claims: &Claims = token.claims();
+                if claims.exp > now {
+                    return Ok(Some(claims.iss));
+                }
             }
+            _ => (),
         }
-        _ => (),
-    }
 
-    Ok(None)
+        Ok(None)
+    }
+}
+
+pub fn authenticate(token: &str) -> Result<Option<Uuid>, SystemTimeError> {
+    token.user_id()
 }
