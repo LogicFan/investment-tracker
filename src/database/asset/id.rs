@@ -1,5 +1,5 @@
-use core::str;
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
+use serde::de::Error;
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,18 +38,20 @@ impl AssetId {
     }
 }
 
-impl From<String> for AssetId {
-    fn from(value: String) -> Self {
+impl TryFrom<String> for AssetId {
+    type Error = ();
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         let mut iter = value.split(":");
-        let split: [&str; 2] = [(); 2].map(|_| iter.next().unwrap());
-        let kind = split[0];
-        let symbol = split[1];
+        let kind = iter.next().ok_or(())?;
+        let symbol = iter.next().ok_or(())?;
 
         match kind {
-            "CURRENCY" => Self::currency(symbol),
-            "CRYPTO" => Self::crypto(symbol),
-            "UNKNOWN" => Self::unknown(symbol),
-            s => Self::stock(&s[1..s.len()], symbol),
+            "CURRENCY" => Ok(Self::currency(symbol)),
+            "CRYPTO" => Ok(Self::crypto(symbol)),
+            "UNKNOWN" => Ok(Self::unknown(symbol)),
+            s if s.starts_with("X") => Ok(Self::stock(&s[1..s.len()], symbol)),
+            _ => Err(()),
         }
     }
 }
@@ -83,7 +85,8 @@ impl<'de> Deserialize<'de> for AssetId {
         D: serde::Deserializer<'de>,
     {
         let value = String::deserialize(deserializer)?;
-        Ok(AssetId::from(value))
+        AssetId::try_from(value)
+            .map_err(|_| D::Error::custom("Unable to convert string"))
     }
 }
 
@@ -95,13 +98,18 @@ impl From<AssetId> for sea_query::value::Value {
 
 impl FromSql for AssetId {
     fn column_result(value: ValueRef<'_>) -> Result<Self, FromSqlError> {
-        if let ValueRef::Text(text) = value {
-            if let Ok(s) = str::from_utf8(text) {
-                return Ok(AssetId::from(String::from(s)).into());
+        match value.as_str() {
+            Err(err) => Err(err),
+            Ok(str) => {
+                if let Ok(kind) = AssetId::try_from(String::from(str)) {
+                    Ok(kind)
+                } else {
+                    Err(FromSqlError::Other(
+                        format!("{} is not a valid AssetId", str).into(),
+                    ))
+                }
             }
         }
-
-        Err(FromSqlError::InvalidType)
     }
 }
 
@@ -112,14 +120,22 @@ mod tests {
 
     #[test]
     fn test_serde() -> Result<(), ServerError> {
-        fn assert_self(asset_id: AssetId) {
-            assert_eq!(asset_id.clone(), AssetId::from(String::from(asset_id)));
+        fn assert_util(value: AssetId) {
+            let value2 =
+                AssetId::try_from(String::from(value.clone())).unwrap();
+            assert_eq!(value, value2);
         }
 
-        assert_self(AssetId::currency("USD"));
-        assert_self(AssetId::crypto("BTC"));
-        assert_self(AssetId::stock("TSE", "DLR"));
-        assert_self(AssetId::unknown("TDB627"));
+        assert_util(AssetId::currency("USD"));
+        assert_util(AssetId::crypto("BTC"));
+        assert_util(AssetId::stock("TSE", "DLR"));
+        assert_util(AssetId::unknown("TDB627"));
+
+        AssetId::try_from(String::from("INVALID_VALUE"))
+            .expect_err("expect conversion failure");
+
+        AssetId::try_from(String::from("ABCD:EFG"))
+            .expect_err("expect conversion failure");
 
         Ok(())
     }
