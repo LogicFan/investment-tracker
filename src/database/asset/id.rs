@@ -119,7 +119,7 @@ mod tests {
     use crate::error::ServerError;
 
     #[test]
-    fn test_serde() -> Result<(), ServerError> {
+    fn test_convert() -> Result<(), ServerError> {
         fn assert_util(value: AssetId) {
             let value2 =
                 AssetId::try_from(String::from(value.clone())).unwrap();

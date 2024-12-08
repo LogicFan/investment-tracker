@@ -119,6 +119,24 @@ mod tests {
     use rusqlite::Connection;
 
     #[test]
+    fn test_convert() -> Result<(), ServerError> {
+        fn assert_util(value: AssetUpdateKind) {
+            let value2 =
+                AssetUpdateKind::try_from(String::from(value.clone())).unwrap();
+            assert_eq!(value, value2);
+        }
+
+        assert_util(AssetUpdateKind::Dividend);
+        assert_util(AssetUpdateKind::Split);
+        assert_util(AssetUpdateKind::Price);
+
+        AssetUpdateKind::try_from(String::from("INVALID_VALUE"))
+            .expect_err("expect conversion failure");
+
+        Ok(())
+    }
+
+    #[test]
     fn test_set_and_get() -> Result<(), ServerError> {
         let mut conn = Connection::open_in_memory()?;
 
