@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
-pub enum AssetUpdateKind {
+pub(super) enum AssetUpdateKind {
     Price,
     Dividend,
     Split,
@@ -109,6 +109,19 @@ impl AssetUpdate {
         transaction.execute(&query, &*values.as_params())?;
         Ok(())
     }
+
+    pub(super) fn delete(
+        asset: Uuid,
+        transaction: &SqlTransaction,
+    ) -> Result<(), ServerError> {
+        let (query, values) = Query::delete()
+            .from_table(AssetUpdateIden::Table)
+            .and_where(Expr::col(AssetUpdateIden::Asset).eq(asset))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        transaction.execute(&query, &*values.as_params())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +181,41 @@ mod tests {
             assert_eq!(t, t2);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_delete() -> Result<(), ServerError> {
+        let mut conn = Connection::open_in_memory()?;
+
+        let a0 = {
+            let tran = conn.transaction()?;
+            database::migration::run_migration(&tran)?;
+            let mut a0 = Asset::new(
+                AssetId::currency("USD"),
+                "United States Dollar",
+                None,
+            );
+            a0.id = a0.insert(&tran)?;
+            tran.commit()?;
+            a0
+        };
+        let up = AssetUpdate::new(a0.id, AssetUpdateKind::Dividend);
+        {
+            let tran = conn.transaction()?;
+            let t = Utc::now();
+            up.set_update(t, &tran)?;
+            tran.commit()?;
+            let tran = conn.transaction()?;
+            let t2 = up.get_update(&tran)?;
+            assert_eq!(t, t2);
+        }
+        {
+            let tran = conn.transaction()?;
+            AssetUpdate::delete(up.asset, &tran)?;
+            let t = up.get_update(&tran)?;
+            assert_eq!(t, DateTime::<Utc>::MIN_UTC)
+        }
         Ok(())
     }
 }
